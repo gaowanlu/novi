@@ -15,10 +15,26 @@ pgPool.on('connect', () => {
     logger.info('PostgreSQL 已连接');
 });
 
+let updateDatabaseNovi = async () => {
+    try {
+        await pgPool.query(`
+CREATE TABLE IF NOT EXISTS orders(
+    id SERIAL PRIMARY KEY,           -- 自增主键
+    user_id INT NOT NULL,            -- 用户ID
+    amount INT NOT NULL,             -- 金额，单位为分
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()  -- 创建时间，默认当前时间
+);`);
+        logger.info('orders 表已创建或已存在');
+    } catch (err) {
+        logger.error('创建 orders 表失败:', err);
+    }
+};
+
 let connectPostgres = async () => {
     try {
         await pgPool.connect();
         logger.info("Postgres connected");
+        await updateDatabaseNovi();
     } catch (err) {
         logger.error("Postgres connect failed", err);
     }

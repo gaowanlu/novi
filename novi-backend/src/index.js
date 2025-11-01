@@ -2,14 +2,17 @@ import './config/loadDotenv.js'
 import logger from './logger.js'
 
 import express from 'express'
-import userRouter from './routes/user.js'
+
 import { middlewareLogger } from './middlewares/middlewareLogger.js'
 import { connectMongo } from './db/dbMongo.js'
-import { pgPool, connectPostgres } from './db/dbPostgres.js'
+import { connectPostgres } from './db/dbPostgres.js'
 import { connectRedis } from './db/dbRedis.js'
 
-const app = express()
-const PORT = 3000
+import userRouter from './routes/user.js'
+import orderRouter from './routes/order.js'
+
+const app = express();
+const PORT = 3000;
 
 app.use(middlewareLogger)
 app.use(express.json())
@@ -22,10 +25,11 @@ app.use((req, res, next) => {
 
 // 路由
 app.get('/', (req, res) => {
-    res.send('Hello Express (JavaScript版) 🚀')
-})
+    res.send('Hello novi 🚀')
+});
 
-app.use('/user', userRouter)
+app.use('/api/user', userRouter);
+app.use('/api/order', orderRouter);
 
 async function startServer() {
     await connectMongo();
