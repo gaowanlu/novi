@@ -1,0 +1,17 @@
+{
+  "name": "novi-backend",
+  "version": "1.0.0",
+  "description": "Each friendship, a unique encryption pair the platform can never see.",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "nodemon src/index.js",
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
