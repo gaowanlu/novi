@@ -7,6 +7,7 @@ import { middlewareLogger } from './middlewares/middlewareLogger.js'
 import { connectMongo } from './db/dbMongo.js'
 import { connectPostgres } from './db/dbPostgres.js'
 import { connectRedis } from './db/dbRedis.js'
+import { kafka } from './mq/mqKafka.js'
 
 import userRouter from './routes/user.js'
 import orderRouter from './routes/order.js'
