@@ -79,8 +79,25 @@ services:
     depends_on:
       - controller-1
 
+  # 🟠 RabbitMQ
+  rabbitmq:
+    image: rabbitmq:4.2.0-management-alpine
+    container_name: rabbitmq_broker
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: password
+    ports:
+      - "127.0.0.1:5672:5672"     # AMQP 协议端口
+      - "127.0.0.1:15672:15672"   # 管理界面端口
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - rabbitmq_log:/var/log/rabbitmq
+
 # 🧱 持久化卷
 volumes:
   mongo_data:
   postgres_data:
   redis_data:
+  rabbitmq_data:
+  rabbitmq_log:

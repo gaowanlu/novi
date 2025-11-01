@@ -1,31 +1,54 @@
-import winston from 'winston';
-import 'winston-daily-rotate-file';
+import winston from 'winston'
+import 'winston-daily-rotate-file'
+import path from 'path'
 
-const { combine, timestamp, printf } = winston.format;
+const { combine, timestamp, printf, colorize, errors } = winston.format
 
-const logFormat = printf(({ timestamp, level, message }) => {
-    return `[${timestamp}] ${level}: ${message}`;
-});
+// 🧩 自定义格式：带文件与行号
+const callerInfo = winston.format((info) => {
+    const stack = new Error().stack?.split('\n')[10]
+    if (stack) {
+        const match = stack.match(/\((.*):(\d+):(\d+)\)/)
+        if (match) {
+            const filePath = path.relative(process.cwd(), match[1])
+            info.location = `${filePath}:${match[2]}`
+        }
+    }
+    return info
+})
 
-// 每小时滚动一次
-const transport = new winston.transports.DailyRotateFile({
-    filename: 'logs/%DATE%.log',   // 日志文件存放目录
-    datePattern: 'YYYY-MM-DD-HH',  // 每小时一个文件
-    zippedArchive: true,           // 压缩旧文件
-    maxSize: '20m',                // 单文件最大 20MB
-    maxFiles: '14d',               // 保存最近 14 天日志
-});
+// 🎨 格式定义
+const logFormat = printf(({ timestamp, level, message, location }) => {
+    return `[${timestamp}] ${level.toUpperCase()}${location ? ` (${location})` : ''}: ${message}`
+})
 
+// 📦 滚动文件配置
+const fileRotateTransport = new winston.transports.DailyRotateFile({
+    filename: 'logs/%DATE%.log',
+    datePattern: 'YYYY-MM-DD-HH',
+    zippedArchive: true,
+    maxSize: '20m',
+    maxFiles: '14d',
+})
+
+// 🌈 控制台输出（带颜色）
+const consoleTransport = new winston.transports.Console({
+    format: combine(colorize({ all: true })),
+})
+
+// 🧱 构建 Logger
 const logger = winston.createLogger({
-    level: 'info',
+    level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
     format: combine(
+        errors({ stack: true }),
         timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
+        ...(process.env.NODE_ENV === 'production' ? [] : [callerInfo()]), // 开发环境显示行号
         logFormat
     ),
-    transports: [
-        new winston.transports.Console(),
-        transport
-    ],
-});
+    transports: [consoleTransport, fileRotateTransport],
+    exceptionHandlers: [fileRotateTransport],
+    rejectionHandlers: [fileRotateTransport],
+})
 
-export default logger;
+// ✅ 导出
+export default logger

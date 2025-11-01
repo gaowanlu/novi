@@ -1,88 +1,86 @@
 import { Kafka } from 'kafkajs'
-import logger from '../logger.js';
+import logger from '../logger.js'
 
-const brokers = (process.env.KAFKA_BROKERS || "").split(",").filter(value => value !== "");
-
+const brokers = (process.env.KAFKA_BROKERS || "").split(",").filter(Boolean)
 const kafka = new Kafka({
     clientId: 'novi',
-    brokers: brokers
-});
-
-const create_topic = async () => {
-    const admin = kafka.admin();
-    await admin.connect();
-
-    const topics = await admin.listTopics();
-
-    logger.info(`已有的Topic: ${topics.join(',')}`);
-
-    if (!topics.includes('test-topic')) {
-        logger.info("创建Topic: test-topic");
-        const topicConfig = {
-            topics: [
-                {
-                    topic: 'test-topic',//主题名
-                    numPartitions: 1,//分区数
-                    replicationFactor: 1//副本数
-                }],
-            waitForLeaders: true//等待leader分配完成
-        };
-
-        const result = await admin.createTopics(topicConfig);
-        logger.info(`topic created: ${result}`);
+    brokers,
+    connectionTimeout: 5000,
+    retry: {
+        initialRetryTime: 300,
+        retries: 10
     }
+})
 
-    logger.info(`创建检查Topic后，已有的Topic: ${(await admin.listTopics()).join(',')}`);
+const TOPIC = 'test-topic'
 
-    await admin.disconnect();
-};
+async function create_topic() {
+    const admin = kafka.admin()
+    await admin.connect()
+    const topics = await admin.listTopics()
 
-const producer_run = async (producer) => {
-    const send_result = await producer.send({
-        topic: 'test-topic',
-        messages: [
-            { value: `heartbeat ${Date.now()}` },
-        ],
-    });
-
-    logger.info(`send result: ${JSON.stringify(send_result)}`);
-    if (send_result && send_result.length > 0) {
-        logger.info(`消息发送成功，主题: ${send_result[0].topicName}, 分区: ${send_result[0].partition}, 偏移量: ${send_result[0].baseOffset}`);
+    if (!topics.includes(TOPIC)) {
+        await admin.createTopics({
+            topics: [{ topic: TOPIC, numPartitions: 1, replicationFactor: 1 }],
+            waitForLeaders: true
+        })
+        logger.info(`✅ Topic ${TOPIC} 已创建`)
     } else {
-        logger.info('消息发送失败');
+        logger.info(`✅ Topic ${TOPIC} 已存在`)
     }
-};
 
-const consumer_run = async () => {
-    let consumeCounter = 0;
-    const consumer = kafka.consumer({ groupId: 'test-group' });
-    await consumer.connect();
-    await consumer.subscribe({ topic: 'test-topic', fromBeginning: false });
+    await admin.disconnect()
+}
+
+async function create_producer() {
+    const producer = kafka.producer()
+    producer.on(producer.events.CONNECT, () => logger.info('🟢 Kafka Producer 已连接'))
+    producer.on(producer.events.DISCONNECT, () => logger.warn('🔴 Kafka Producer 已断开'))
+    producer.on(producer.events.REQUEST_TIMEOUT, e => logger.warn(`⚠️ Producer 请求超时: ${e.payload.clientId}`))
+
+    await producer.connect()
+    return producer
+}
+
+async function producer_run(producer) {
+    try {
+        const result = await producer.send({
+            topic: TOPIC,
+            messages: [{ value: `heartbeat ${Date.now()}` }],
+        })
+        logger.info(`💌 Sent: ${JSON.stringify(result)}`)
+    } catch (err) {
+        logger.error(`❌ Producer send 失败: ${err.message}`)
+    }
+}
+
+async function create_consumer() {
+    const consumer = kafka.consumer({ groupId: 'test-group' })
+
+    consumer.on(consumer.events.CONNECT, () => logger.info('🟢 Kafka Consumer 已连接'))
+    consumer.on(consumer.events.DISCONNECT, () => logger.warn('🔴 Kafka Consumer 已断开'))
+    consumer.on(consumer.events.CRASH, e => logger.error(`💥 Kafka Consumer 崩溃: ${e.payload.error.message}`))
+    consumer.on(consumer.events.HEARTBEAT, e => logger.debug(`💓 Kafka Consumer Heartbeat @ ${new Date().toISOString()}`))
+
+    await consumer.connect()
+    await consumer.subscribe({ topic: TOPIC, fromBeginning: false })
 
     await consumer.run({
         eachMessage: async ({ topic, partition, message }) => {
-            consumeCounter++;
-            logger.info(`消费消息: consumeCounter[${consumeCounter}] ${JSON.stringify({
-                value: message.value.toString(),
-                topic,
-                partition
-            })}`)
-        },
-    });
+            logger.info(`📥 消费消息: ${message.value.toString()}`)
+        }
+    })
 
-    logger.info("消费者已启动，等待消息...");
-};
+    return consumer
+}
 
-(async () => {
-    await create_topic();
-    await consumer_run();
+async function start() {
+    await create_topic()
+    const producer = await create_producer()
+    await create_consumer()
 
-    const producer = kafka.producer();
-    await producer.connect();
+    // 每 10 秒发一次心跳
+    setInterval(() => producer_run(producer), 10000)
+}
 
-    setInterval(() => {
-        producer_run(producer);
-    }, 5000);
-})();
-
-export { kafka };
+start().catch(err => logger.error(`启动出错: ${err.message}`))
