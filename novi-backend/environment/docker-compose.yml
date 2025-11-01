@@ -1,0 +1,46 @@
+version: '3.9'
+
+services:
+  # 🟢 MongoDB
+  mongo:
+    image: mongo:8.2.1
+    container_name: mongo_db
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: password
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  # 🟣 PostgreSQL
+  postgres:
+    image: postgres:14.19-alpine3.21
+    container_name: postgres_db
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: novi
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # 🔴 Redis
+  redis:
+    image: redis:8.2.2
+    container_name: redis_cache
+    restart: always
+    command: [ "redis-server", "--requirepass", "password" ]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_data:/data
+
+# 🧱 持久化卷
+volumes:
+  mongo_data:
+  postgres_data:
+  redis_data:

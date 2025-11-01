@@ -1,16 +1,22 @@
+import './config/loadDotenv.js'
+import logger from './logger.js'
+
 import express from 'express'
 import userRouter from './routes/user.js'
-import { logger } from './middlewares/logger.js'
+import { middlewareLogger } from './middlewares/middlewareLogger.js'
+import { connectMongo } from './db/dbMongo.js'
+import { pgPool, connectPostgres } from './db/dbPostgres.js'
+import { connectRedis } from './db/dbRedis.js'
 
 const app = express()
 const PORT = 3000
 
-app.use(logger)
+app.use(middlewareLogger)
 app.use(express.json())
 
 // 中间件示例
 app.use((req, res, next) => {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`)
+    logger.info(`[${new Date().toISOString()}] ${req.method} ${req.url}`)
     next()
 })
 
@@ -21,6 +27,15 @@ app.get('/', (req, res) => {
 
 app.use('/user', userRouter)
 
-app.listen(PORT, () => {
-    console.log(`✅ Server running at http://localhost:${PORT}`)
-})
+async function startServer() {
+    await connectMongo();
+    await connectRedis();
+    await connectPostgres();
+
+    app.listen(PORT, () => {
+        logger.info(`✅ Server running at http://localhost:${PORT}`)
+    })
+}
+
+startServer();
+
