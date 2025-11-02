@@ -19,11 +19,11 @@ router.post('/', middlewareValidate(postUserSchema), async (req, res) => {
     try {
         const userByUserName = await User.findOne({ userName }).select('_id userName');
         if (userByUserName) {
-            return res.status(400).json({ error: '用户名已被占用' });
+            return res.status(400).json({ message: '用户名已被占用' });
         }
         const userByEmail = await User.findOne({ email }).select('_id email');
         if (userByEmail) {
-            return res.status(400).json({ error: '邮箱已被注册' });
+            return res.status(400).json({ message: '邮箱已被注册' });
         }
 
         let passwordSalt = crypto.randomBytes(16).toString('hex');
@@ -42,7 +42,7 @@ router.post('/', middlewareValidate(postUserSchema), async (req, res) => {
 
         res.status(200).json(resultUser.toJSON());
     } catch (err) {
-        res.status(400).json({ error: err.message });
+        res.status(400).json({ message: err.message });
     }
 });
 
@@ -52,7 +52,7 @@ router.get('/getAll', async (req, res) => {
         const users = await User.find().select('_id userName');
         res.status(200).json(users);
     } catch (err) {
-        res.status(400).json({ error: err.message });
+        res.status(400).json({ message: err.message });
     }
 });
 
@@ -74,7 +74,7 @@ router.post('/find', middlewareValidate(postUserFindSchema), async (req, res) =>
 
         res.status(200).json(users);
     } catch (err) {
-        res.status(400).json({ error: err.message });
+        res.status(400).json({ message: err.message });
     }
 });
 
@@ -97,13 +97,13 @@ router.post('/delete', middlewareValidate(postUserDeleteSchema), async (req, res
         const users = await User.find({ $or: [{ userName }, { email }, { _id }] }).select('_id userName email');
 
         if (users.length === 0) {
-            return res.status(404).json({ error: '未找到指定的用户' });
+            return res.status(404).json({ message: '未找到指定的用户' });
         }
 
         await User.deleteMany({ $or: [{ userName }, { email }, { _id }] });
         res.status(200).json(users);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ message: err.message });
     }
 });
 
@@ -125,7 +125,7 @@ router.put('/', middlewareValidate(putUserSchema), async (req, res) => {
 
         res.status(200).json(updatedUser);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ message: err.message });
     }
 });
 

@@ -18,7 +18,7 @@ router.post('/', middlewareValidate(postOrderSchema), async (req, res) => {
         res.status(201).json(order);
     } catch (err) {
         logger.error('创建订单失败：', err);
-        res.status(500).json({ error: '服务器内部错误' });
+        res.status(500).json({ message: '服务器内部错误' });
     }
 });
 
@@ -33,7 +33,7 @@ router.get('/', middlewareValidate(getOrderSchema, 'query'), async (req, res) =>
         res.json(orders);
     } catch (err) {
         logger.error(`查询用户 ${req.params.user_id}的订单失败:`, err.message);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ message: err.message });
     }
 });
 
@@ -50,7 +50,7 @@ router.delete('/', middlewareValidate(deleteOrderSchema, 'query'), async (req, r
         res.json(deletedOrders);
     } catch (err) {
         logger.error(`删除用户${user_id}订单 ${orderId} 失败 `, err.message);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ message: err.message });
     }
 });
 

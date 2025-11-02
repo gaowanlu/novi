@@ -12,6 +12,7 @@ import './mq/mqRabbitmq.js'
 
 import userRouter from './routes/user.js'
 import orderRouter from './routes/order.js'
+import authRouter from './routes/auth.js'
 
 const app = express();
 const PORT = 3000;
@@ -32,6 +33,7 @@ app.get('/', (req, res) => {
 
 app.use('/api/user', userRouter);
 app.use('/api/order', orderRouter);
+app.use('/api/auth', authRouter);
 
 async function startServer() {
     await connectMongo();

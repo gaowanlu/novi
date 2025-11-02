@@ -15,7 +15,7 @@ const middlewareValidate = (schema, property = 'body') => (req, res, next) => {
 
     if (error) {
         logger.error(error.message);
-        return res.status(400).json({ error: error.details[0].message });
+        return res.status(400).json({ message: error.details[0].message });
     }
 
     // ✅ 自动替换为清理后的数据（含 trim 后的值）
