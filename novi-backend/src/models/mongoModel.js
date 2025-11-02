@@ -14,4 +14,8 @@ userSchema.index({ email: 1 }, { unique: true });
 
 const User = mongoose.model('user', userSchema);
 
-export { User };
+const onMongoConnected = () => {
+    User.syncIndexes();
+};
+
+export { User, onMongoConnected };
