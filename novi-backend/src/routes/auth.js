@@ -37,7 +37,7 @@ router.post('/login', middlewareValidate(postLoginSchema), async (req, res) => {
         // 保存token到redis里带TTL
         await redisClient.set(`user:auth:${userByEmail._id}`, newToken, { EX: JWT_TOKEN_TTL });
 
-        res.status(200).json({ jwtToken: newToken });
+        res.status(200).json({ jwtToken: newToken, userId: userByEmail._id, userName: userByEmail.userName, email: userByEmail.email });
     } catch (err) {
         res.status(400).json({ message: err.message });
     }

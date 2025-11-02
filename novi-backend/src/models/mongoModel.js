@@ -28,7 +28,7 @@ const friendRequestSchema = new mongoose.Schema({
     },
     status: { // 好友验证状态
         type: String,
-        enum: ['pending', 'accepted', 'rejected'],
+        enum: ['pending', 'accepted', 'rejected', 'deleted'],
         default: 'pending'
     },
     createdAt: { // 请求发出时间
