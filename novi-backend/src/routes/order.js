@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { createOrder, selectOrderByuser_id, deleteOrderByIdAnduser_id } from '../models/postgresModel.js'
+import { createOrder, selectOrderByUserId, deleteOrderByIdAndUserId } from '../models/postgresModel.js'
 import logger from '../logger.js'
 import Joi from 'joi'
 import middlewareValidate from '../middlewares/middlewareValidate.js'
@@ -29,7 +29,7 @@ const getOrderSchema = Joi.object({
 router.get('/', middlewareValidate(getOrderSchema, 'query'), async (req, res) => {
     try {
         const user_id = parseInt(req.query.user_id, 10);
-        const orders = await selectOrderByuser_id(user_id);
+        const orders = await selectOrderByUserId(user_id);
         res.json(orders);
     } catch (err) {
         logger.error(`查询用户 ${req.params.user_id}的订单失败:`, err.message);
@@ -46,7 +46,7 @@ router.delete('/', middlewareValidate(deleteOrderSchema, 'query'), async (req, r
     try {
         const orderId = parseInt(req.query.id, 10);
         const user_id = parseInt(req.query.user_id, 10);
-        const deletedOrders = await deleteOrderByIdAnduser_id(orderId, user_id);
+        const deletedOrders = await deleteOrderByIdAndUserId(orderId, user_id);
         res.json(deletedOrders);
     } catch (err) {
         logger.error(`删除用户${user_id}订单 ${orderId} 失败 `, err.message);

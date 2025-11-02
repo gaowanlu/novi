@@ -14,7 +14,7 @@ async function createOrder(user_id, amount) {
     }
 };
 
-async function selectOrderByuser_id(user_id) {
+async function selectOrderByUserId(user_id) {
     try {
         const result = await pgPool.query(
             'SELECT* from orders where user_id=$1',
@@ -27,7 +27,7 @@ async function selectOrderByuser_id(user_id) {
     }
 }
 
-async function deleteOrderByIdAnduser_id(id, user_id) {
+async function deleteOrderByIdAndUserId(id, user_id) {
     try {
         const result = await pgPool.query(
             'DELETE FROM orders WHERE id = $1 AND user_id = $2 RETURNING *',
@@ -46,6 +46,6 @@ async function deleteOrderByIdAnduser_id(id, user_id) {
 
 export {
     createOrder,
-    selectOrderByuser_id,
-    deleteOrderByIdAnduser_id
+    selectOrderByUserId,
+    deleteOrderByIdAndUserId
 };

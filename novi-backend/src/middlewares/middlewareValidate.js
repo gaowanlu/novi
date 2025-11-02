@@ -5,7 +5,7 @@ import logger from '../logger.js';
  * property: 可选，'body' | 'params' | 'query'，默认 'body'
  */
 const middlewareValidate = (schema, property = 'body') => (req, res, next) => {
-    if (property !== 'body' && property !== 'params' && property != 'query') {
+    if (!['body', 'params', 'query'].includes(property)) {
         logger.error(`middlewareValidate property err ${property}`);
         property = 'body';
     }
@@ -18,8 +18,14 @@ const middlewareValidate = (schema, property = 'body') => (req, res, next) => {
         return res.status(400).json({ message: error.details[0].message });
     }
 
-    // ✅ 自动替换为清理后的数据（含 trim 后的值）
-    req[property] = value;
+    // ✅ 对于 query，只能逐项赋值
+    if (property === 'query') {
+        Object.keys(value).forEach(k => {
+            req.query[k] = value[k];
+        });
+    } else {
+        req[property] = value; // body、params 可直接替换
+    }
 
     next();
 };
