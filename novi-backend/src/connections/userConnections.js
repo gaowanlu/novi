@@ -5,6 +5,7 @@ import jwt from "jsonwebtoken";
 
 const userConnections = {
     socketIOServer: null,
+    userId2Socket: new Map(),
     init(httpServer) {
         this.socketIOServer = new Server(httpServer, {
             path: '/ws',
@@ -54,12 +55,21 @@ const userConnections = {
                 await this.OnHeartbeat(socket, msg);
             });
         });
+
+        setInterval(() => {
+            let allOnlineUserId = [];
+            this.userId2Socket.forEach((v, k, map) => {
+                allOnlineUserId.push(k);
+            });
+            logger.error(`所有在线用户=> 数量 ${allOnlineUserId.length} 用户ID ${allOnlineUserId.join(',')}`);
+        }, 2000);
     },
     async onConnect(socket) {
         logger.error(`用户已连接: socketId ${socket.id} userId ${socket.noviUser._id}`);
         try {
             // 300秒5分钟
             await redisClient.SET(`user:online:${socket.noviUser._id}`, `${process.env.NOVI_NODE}`, { EX: 60 * 5 });
+            this.userId2Socket.set(socket.noviUser._id, socket);
         } catch (err) {
             logger.error(`新用户连接 ${err.message}`);
         }
@@ -70,6 +80,7 @@ const userConnections = {
             noviUserId = socket.noviUser._id;
         }
         logger.error(`用户断开: socketId ${socket.id} userId ${noviUserId}`);
+        this.userId2Socket.delete(noviUserId);
 
         try {
             await redisClient.DEL(`user:online:${noviUserId}`);
@@ -83,12 +94,21 @@ const userConnections = {
     },
     async OnHeartbeat(socket, msg) {
         logger.error(`WS heartbeat ${socket.noviUser._id} 收到消息 ${msg}`);
+
+        if (socket.noviUser.latestHeartbeatTimestamp) {
+            // 三分钟内不更新redis减轻压力
+            if (Date.now() - socket.noviUser.latestHeartbeatTimestamp <= 60 * 3 * 1000) {
+                return;
+            }
+        }
+
         try {
             // 300秒5分钟
             await redisClient.SET(`user:online:${socket.noviUser._id}`, `${process.env.NOVI_NODE}`, { EX: 60 * 5 });
             logger.error(`更新在线状态 user:online:${socket.noviUser._id} ${process.env.NOVI_NODE} 成功`);
+            socket.noviUser.latestHeartbeatTimestamp = Date.now();
         } catch (err) {
-            logger.error(`新用户连接 ${err.message}`);
+            logger.error(`WS heartbeat ${err.message}`);
         }
     }
 };
