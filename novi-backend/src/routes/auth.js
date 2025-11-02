@@ -1,5 +1,5 @@
 import { Router } from "express";
-import User from '../models/userModel.js';
+import { User } from '../models/mongoModel.js';
 import Joi from 'joi';
 import middlewareValidate from '../middlewares/middlewareValidate.js';
 import middlewareAuth from '../middlewares/middlewareAuth.js';

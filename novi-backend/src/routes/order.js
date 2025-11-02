@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { createOrder, selectOrderByuser_id, deleteOrderByIdAnduser_id } from '../models/orderModel.js'
+import { createOrder, selectOrderByuser_id, deleteOrderByIdAnduser_id } from '../models/postgresModel.js'
 import logger from '../logger.js'
 import Joi from 'joi'
 import middlewareValidate from '../middlewares/middlewareValidate.js'
