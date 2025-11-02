@@ -13,6 +13,8 @@ import './mq/mqRabbitmq.js'
 import userRouter from './routes/user.js'
 import orderRouter from './routes/order.js'
 import authRouter from './routes/auth.js'
+import friendRouter from './routes/friend.js';
+import messageRouter from './routes/message.js';
 
 import http from 'http'
 import { userConnections } from './connections/userConnections.js'
@@ -22,7 +24,7 @@ const HOST = process.env.NOVI_HOST;
 
 const app = express();
 const httpServer = http.createServer(app);
-// /ws
+// /api/ws
 userConnections.init(httpServer);
 
 app.use(middlewareLogger)
@@ -37,6 +39,8 @@ app.get('/', (req, res) => {
 app.use('/api/user', userRouter);
 app.use('/api/order', orderRouter);
 app.use('/api/auth', authRouter);
+app.use('/api/friend', friendRouter);
+app.use('/api/message', messageRouter);
 
 async function startServer() {
     await connectMongo();

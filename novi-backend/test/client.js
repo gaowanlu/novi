@@ -153,7 +153,7 @@ async function logout() {
 // socket.io
 async function testUserConnect(token) {
     const socket = io(BASE_URL, {
-        path: "/ws",
+        path: "/api/ws",
         auth: {
             token // 携带认证信息
         },

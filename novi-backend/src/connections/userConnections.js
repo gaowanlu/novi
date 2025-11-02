@@ -8,7 +8,7 @@ const userConnections = {
     userId2Socket: new Map(),
     init(httpServer) {
         this.socketIOServer = new Server(httpServer, {
-            path: '/ws',
+            path: '/api/ws',
             cors: {
                 origin: process.env.NOVI_SOCKETIO_CORS_ORIGIN
             },
