@@ -1,3 +1,5 @@
+import { io } from "socket.io-client";
+
 const BASE_URL = 'http://localhost:3000'; // 改成你的服务器地址
 const REGISTER_URL = `${BASE_URL}/api/user`;
 const LOGIN_URL = `${BASE_URL}/api/auth/login`;
@@ -98,10 +100,27 @@ async function main() {
     await heartbeat();
     heartbeatTimer = setInterval(heartbeat, 2 * 60 * 1000);
 
+    // 创建socket.io客户端
+    const socketIOClient = await testUserConnect(jwtToken);
+    socketIOClient.on("connect", () => {
+        console.log("✅ 已成功连接到服务器");
+        socketIOClient.emit('noviheartbeat', '');
+
+        // setInterval(() => {
+        //     socketIOClient.emit('message', 'hello world');
+        // }, 1000);
+
+        setInterval(() => {
+            socketIOClient.emit('noviheartbeat', '');
+        }, 10000);
+    });
+
+
     // 捕获 Ctrl+C 信号
     process.on('SIGINT', async () => {
         console.log('\n🛑 检测到退出信号，准备登出...');
         await logout();
+        socketIOClient.close();
         process.exit(0);
     });
 }
@@ -129,6 +148,32 @@ async function logout() {
     } catch (err) {
         console.error('登出时出错:', err);
     }
+}
+
+// socket.io
+async function testUserConnect(token) {
+    const socket = io(BASE_URL, {
+        path: "/ws",
+        auth: {
+            token // 携带认证信息
+        },
+    });
+
+
+    socket.on("message", (msg) => {
+        console.log("💬 收到消息:", msg);
+    });
+
+    socket.on("disconnect", () => {
+        console.log("❌ 连接断开");
+    });
+
+    // ⚠️ 认证失败或连接错误
+    socket.on("connect_error", (err) => {
+        console.error("❌ 连接错误:", err.message);
+    });
+
+    return socket;
 }
 
 main();

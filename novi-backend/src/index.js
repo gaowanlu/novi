@@ -14,23 +14,26 @@ import userRouter from './routes/user.js'
 import orderRouter from './routes/order.js'
 import authRouter from './routes/auth.js'
 
+import http from 'http'
+import { userConnections } from './connections/userConnections.js'
+
+const PORT = process.env.NOVI_PORT;
+const HOST = process.env.NOVI_HOST;
+
 const app = express();
-const PORT = 3000;
+const httpServer = http.createServer(app);
+// /ws
+userConnections.init(httpServer);
 
 app.use(middlewareLogger)
 app.use(express.json())
-
-// 中间件示例
 app.use((req, res, next) => {
     logger.info(`[${new Date().toISOString()}] ${req.method} ${req.url}`)
     next()
 })
-
-// 路由
 app.get('/', (req, res) => {
     res.send('Hello novi 🚀')
 });
-
 app.use('/api/user', userRouter);
 app.use('/api/order', orderRouter);
 app.use('/api/auth', authRouter);
@@ -40,10 +43,9 @@ async function startServer() {
     await connectRedis();
     await connectPostgres();
 
-    app.listen(PORT, () => {
-        logger.info(`✅ Server running at http://localhost:${PORT}`)
+    httpServer.listen(PORT, HOST, () => {
+        logger.info(`✅ Server running at http://${HOST}:${PORT}`)
     })
 }
 
 startServer();
-
