@@ -1,5 +1,5 @@
 ---
-title: 默认模块
+title: noviapi
 language_tabs:
   - shell: Shell
   - http: HTTP
@@ -19,7 +19,7 @@ generator: "@tarslib/widdershins v4.0.30"
 
 ---
 
-# 默认模块
+# noviapi
 
 Base URLs:
 
@@ -127,8 +127,9 @@ POST /api/user
 
 ```json
 {
-  "user_name": "新用户7",
-  "email": "2209120831@qq.com"
+  "userName": "新用户7",
+  "email": "2209120831@qq.com",
+  "password": "123456789"
 }
 ```
 
@@ -162,9 +163,9 @@ PUT /api/user
 
 ```json
 {
-  "_id": "6905b96dfcd686785d62a012",
-  "user_name": "高万禄",
-  "email": "2209120828@qq.com"
+  "_id": "6906e7adc4dd2c31453c7273",
+  "userName": "高万禄",
+  "email": "2209120827@qq.com"
 }
 ```
 
@@ -219,8 +220,7 @@ POST /api/user/find
 ```json
 {
   "_id": "6905baabca4e9cef2a344d7b",
-  "user_name": "新用户3",
-  "email": "2209120828@qq.com"
+  "userName": "新用户7"
 }
 ```
 
@@ -254,8 +254,8 @@ POST /api/user/delete
 
 ```json
 {
-  "_id": "6905b96dfcd686785d62a012",
-  "user_name": "",
+  "_id": "6906e6a0cb87ac1292fff9a4",
+  "userName": "",
   "email": ""
 }
 ```
