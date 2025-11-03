@@ -148,6 +148,10 @@ router.put('/request', middlewareAuth, middlewareValidate(putFriendRequest), asy
             return res.status(400).json({ message: '无法重复处理目标好友申请' });
         }
 
+        if ('accepted' !== status && 'rejected' !== status) {
+            return res.status(400).json({ message: '指定status不符合要求 必须是 accepted or rejected' });
+        }
+
         await FriendRequest.updateOne({ _id: friendRequestById._id },
             {
                 $set: { status: status, respondedAt: new Date() }
@@ -165,6 +169,43 @@ router.put('/request', middlewareAuth, middlewareValidate(putFriendRequest), asy
 
 // 删除好友关系
 // DELETE friend/
+const deleteFriend = Joi.object({
+    targetUserId: Joi.string().trim().max(100).required(),
+    friendRequestId: Joi.string().trim().max(100).required(),
+});
+router.delete('/', middlewareAuth, middlewareValidate(deleteFriend, 'query'), async (req, res) => {
+    const myUserId = req.noviUser._id;
+    const { targetUserId, friendRequestId } = req.query;
+
+    try {
+        const targetFriendRequest = await FriendRequest.findOne({
+            status: 'accepted',
+            $or: [
+                { _id: friendRequestId },
+                { requester: myUserId, receiver: targetUserId },
+                { requester: targetUserId, receiver: myUserId }
+            ]
+        });
+        if (!targetFriendRequest) {
+            return res.status(400).json({ message: '在非好友状态下无法解除好友关系' });
+        }
+
+        const markDeletedResult = await FriendRequest.updateOne({ _id: targetFriendRequest._id },
+            {
+                $set: { status: 'deleted' }
+            }
+        );
+        if (markDeletedResult.matchedCount !== 1 || markDeletedResult.modifiedCount !== 1) {
+            return res.status(500).json({ message: '标记接触好友关系异常' });
+        }
+
+        const deletedFriendRequest = await FriendRequest.findOne({ _id: targetFriendRequest._id });
+
+        return res.status(200).json(deletedFriendRequest);
+    } catch (err) {
+        return res.status(400).json({ message: err.message });
+    }
+});
 
 // 取消好友申请
 // DELETE friend/request
