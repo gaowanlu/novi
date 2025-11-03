@@ -39,7 +39,8 @@ router.post('/login', middlewareValidate(postLoginSchema), async (req, res) => {
 
         res.status(200).json({ jwtToken: newToken, userId: userByEmail._id, userName: userByEmail.userName, email: userByEmail.email });
     } catch (err) {
-        res.status(400).json({ message: err.message });
+        logger.error(`${err.message}`);
+        res.status(500).json({ message: err.message });
     }
 });
 
@@ -55,6 +56,7 @@ router.get('/logout', middlewareAuth, async (req, res) => {
         await redisClient.del(`user:auth:${_id}`);
         res.status(200).json({ message: '成功登出' });
     } catch (err) {
+        logger.error(`${err.message}`);
         res.status(500).json({ message: `${err.message}` });
     }
 });
@@ -72,6 +74,7 @@ router.get('/heartbeat', middlewareAuth, async (req, res) => {
 
         res.status(401).json({ message: 'Token已失效' });
     } catch (err) {
+        logger.error(`${err.message}`);
         res.status(500).json({ message: `${err.message}` });
     }
 });

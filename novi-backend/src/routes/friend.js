@@ -54,6 +54,7 @@ router.post(
 
             return res.status(200).json(saveNewFriendRequest);
         } catch (err) {
+            logger.error(`${err.message}`);
             return res.status(500).json({ message: err.message });
         }
     }
@@ -119,6 +120,7 @@ router.get('/request', middlewareAuth, async (req, res) => {
 
         return res.status(200).json(friendRequests);
     } catch (err) {
+        logger.error(`${err.message}`);
         return res.status(500).json({ message: err.message });
     }
 });
@@ -163,6 +165,7 @@ router.put('/request', middlewareAuth, middlewareValidate(putFriendRequest), asy
 
         return res.status(200).json(friendRequestById);
     } catch (err) {
+        logger.error(`${err.message}`);
         return res.status(500).json({ message: err.message });
     }
 });
@@ -203,7 +206,8 @@ router.delete('/', middlewareAuth, middlewareValidate(deleteFriend, 'query'), as
 
         return res.status(200).json(deletedFriendRequest);
     } catch (err) {
-        return res.status(400).json({ message: err.message });
+        logger.error(`${err.message}`);
+        return res.status(500).json({ message: err.message });
     }
 });
 

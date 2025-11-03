@@ -42,7 +42,8 @@ router.post('/', middlewareValidate(postUserSchema), async (req, res) => {
 
         res.status(200).json(resultUser.toJSON());
     } catch (err) {
-        res.status(400).json({ message: err.message });
+        logger.error(`${err.message}`);
+        res.status(500).json({ message: err.message });
     }
 });
 
@@ -52,7 +53,8 @@ router.get('/getAll', async (req, res) => {
         const users = await User.find().select('_id userName');
         res.status(200).json(users);
     } catch (err) {
-        res.status(400).json({ message: err.message });
+        logger.error(`${err.message}`);
+        res.status(500).json({ message: err.message });
     }
 });
 
@@ -74,7 +76,8 @@ router.post('/find', middlewareValidate(postUserFindSchema), async (req, res) =>
 
         res.status(200).json(users);
     } catch (err) {
-        res.status(400).json({ message: err.message });
+        logger.error(`${err.message}`);
+        res.status(500).json({ message: err.message });
     }
 });
 
@@ -103,6 +106,7 @@ router.post('/delete', middlewareValidate(postUserDeleteSchema), async (req, res
         await User.deleteMany({ $or: [{ userName }, { email }, { _id }] });
         res.status(200).json(users);
     } catch (err) {
+        logger.error(`${err.message}`);
         res.status(500).json({ message: err.message });
     }
 });
@@ -125,6 +129,7 @@ router.put('/', middlewareValidate(putUserSchema), async (req, res) => {
 
         res.status(200).json(updatedUser);
     } catch (err) {
+        logger.error(`${err.message}`);
         res.status(500).json({ message: err.message });
     }
 });
