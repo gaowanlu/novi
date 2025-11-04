@@ -250,5 +250,68 @@ router.delete('/request', middlewareAuth, middlewareValidate(deleteFriendRequest
 
 // 获取自己的所有好友，仅获取目前还是好友关系状态的
 // GET friend/
+router.get('/', middlewareAuth, async (req, res) => {
+    const myUserId = req.noviUser._id;
+
+    try {
+        const friendRequests = await FriendRequest.aggregate([
+            {
+                $match: {
+                    $or: [
+                        { requester: mongoose.Types.ObjectId.createFromHexString(myUserId) },
+                        { receiver: mongoose.Types.ObjectId.createFromHexString(myUserId) }
+                    ],
+                    status: 'accepted',
+                }
+            },
+            // 合并 requester 信息
+            {
+                $lookup: {
+                    from: 'users',
+                    let: { requesterId: '$requester' },
+                    pipeline: [
+                        { $match: { $expr: { $eq: ['$_id', '$$requesterId'] } } },
+                        { $project: { _id: 1, userName: 1 } } // 只取必要字段
+                    ],
+                    as: 'requester'
+                }
+            },
+            { $unwind: '$requester' },
+
+            // 合并 receiver 信息
+            {
+                $lookup: {
+                    from: 'users',
+                    let: { receiverId: '$receiver' },
+                    pipeline: [
+                        { $match: { $expr: { $eq: ['$_id', '$$receiverId'] } } },
+                        { $project: { _id: 1, userName: 1 } }
+                    ],
+                    as: 'receiver'
+                }
+            },
+            { $unwind: '$receiver' },
+
+            // 最终输出
+            {
+                $project: {
+                    _id: 0,
+                    friendRequestId: '$_id',
+                    status: 1,
+                    createdAt: 1,
+                    'requester.userId': '$requester._id',
+                    'requester.userName': '$requester.userName',
+                    'receiver.userId': '$receiver._id',
+                    'receiver.userName': '$receiver.userName'
+                }
+            }
+        ]);
+
+        return res.status(200).json(friendRequests);
+    } catch (err) {
+        logger.error(`${err.message}`);
+        return res.status(500).json({ message: err.message });
+    }
+});
 
 export default router;
