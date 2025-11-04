@@ -199,7 +199,7 @@ router.delete('/', middlewareAuth, middlewareValidate(deleteFriend, 'query'), as
             }
         );
         if (markDeletedResult.matchedCount !== 1 || markDeletedResult.modifiedCount !== 1) {
-            return res.status(500).json({ message: '标记接触好友关系异常' });
+            return res.status(500).json({ message: '标记解除好友关系异常' });
         }
 
         const deletedFriendRequest = await FriendRequest.findOne({ _id: targetFriendRequest._id });
@@ -211,10 +211,44 @@ router.delete('/', middlewareAuth, middlewareValidate(deleteFriend, 'query'), as
     }
 });
 
-// 取消好友申请
+// 取消好友申请,在发出好友申请后但是接收者还暂未回复时，发起者可以删掉申请，停止加好友流程
 // DELETE friend/request
+const deleteFriendRequest = Joi.object({
+    friendRequestId: Joi.string().trim().max(100).required()
+});
+router.delete('/request', middlewareAuth, middlewareValidate(deleteFriendRequest, 'query'), async (req, res) => {
+    const myUserId = req.noviUser._id;
+    const { friendRequestId } = req.query;
 
-// 获取自己的所有好友
+    try {
+        const targetFriendRequest = await FriendRequest.findOne({
+            _id: friendRequestId,
+            requester: myUserId,
+            status: 'pending'
+        });
+        if (!targetFriendRequest) {
+            return res.status(400).json({ message: '找不到符合要求的好友申请' });
+        }
+
+        const markDeletedResult = await FriendRequest.updateOne({ _id: targetFriendRequest._id },
+            {
+                $set: { status: 'canceled' }
+            }
+        );
+        if (markDeletedResult.matchedCount !== 1 || markDeletedResult.modifiedCount !== 1) {
+            return res.status(500).json({ message: '取消好友申请失败' });
+        }
+
+        const deletedFriendRequest = await FriendRequest.findOne({ _id: targetFriendRequest._id });
+
+        return res.status(200).json(deletedFriendRequest);
+    } catch (err) {
+        logger.error(`${err.message}`);
+        return res.status(500).json({ message: err.message });
+    }
+});
+
+// 获取自己的所有好友，仅获取目前还是好友关系状态的
 // GET friend/
 
 export default router;
