@@ -68,9 +68,11 @@ const friendMessageSchema = new mongoose.Schema({
     },
     receivedAt: { // 接收者首次拉取消息的时间
         type: Date,
+        default: null,
     },
     readAt: { // 接收者确认已读时间
         type: Date,
+        default: null,
     },
 }, { timestamps: true });
 friendMessageSchema.index({ sender: 1, receiver: 1, sentAt: -1 });

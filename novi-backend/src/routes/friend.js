@@ -33,13 +33,13 @@ router.post(
 
             // 检查是否已经为好友关系了 没有确认的好友申请记录
             const existFriendRequest = await FriendRequest.findOne({
-                status: {
-                    $in: ['accepted', 'pending']
-                },
                 $or: [
                     { requester: myUserId, receiver: targetUserId },
                     { requester: targetUserId, receiver: myUserId }
-                ]
+                ],
+                status: {
+                    $in: ['accepted', 'pending']
+                }
             });
             if (existFriendRequest) {
                 return res.status(200).json(existFriendRequest);
