@@ -76,6 +76,7 @@ const friendMessageSchema = new mongoose.Schema({
     },
 }, { timestamps: true });
 friendMessageSchema.index({ sender: 1, receiver: 1, sentAt: -1 });
+friendMessageSchema.index({ receiver: 1, readAt: 1, sentAt: -1 });
 const FriendMessage = mongoose.model('friendMessage', friendMessageSchema);
 
 const onMongoConnected = () => {
