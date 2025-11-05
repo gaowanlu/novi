@@ -95,6 +95,7 @@ router.get('/allfriend', middlewareAuth, async (req, res) => {
                     unreadCount: 1, // 未读条数
                     content: "$latestMessage.content",
                     sentAt: "$latestMessage.sentAt",
+                    lastMessageID: "$latestMessage._id",
                     noviCode: "$latestMessage.noviCode",
                     senderInfo: { userName: 1, _id: 1 }
                 }
@@ -109,6 +110,21 @@ router.get('/allfriend', middlewareAuth, async (req, res) => {
         return res.status(500).json({ message: err.message });
     }
 });
+
+// 拉取指定好友发送给自己的信息从第一条未读开始
+// 也应该拉取到第一条未读的消息之前的最多10条用于消息显示
+// 如果没有未读的信息则拉取最新的10条信息
+// 如果指定了时间则表示拉取指定时间之前的最多30条消息
+// GET message/pull/unread/byfriend
+// const getMessagePullUnreadByFriend = Joi.object({
+//     sender: Joi.string().trim().min(10).max(100).required()
+// });
+// router.get('/pull/unread/byfriend', middlewareAuth, middlewareValidate(getMessagePullUnreadByFriend), async (req, res) => {
+//     const myUserId = req.noviUser._id;
+// });
+
+// 提供一个数组提交消息ID用于确认消息消息已读
+// POST message/markreaded
 
 // 接收者确认消息解密成功
 // POST message/crypto/ack
