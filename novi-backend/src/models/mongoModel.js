@@ -66,7 +66,7 @@ const friendMessageSchema = new mongoose.Schema({
         type: Date,
         default: Date.now,
     },
-    receivedAt: { // 接收者首次拉取消息的时间
+    cryptoAckAt: { // 接收者解密确认时间
         type: Date,
         default: null,
     },

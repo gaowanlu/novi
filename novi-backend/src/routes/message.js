@@ -196,7 +196,53 @@ router.get('/pull/unread/byfriend',
 );
 
 // 提供一个数组提交消息ID用于确认消息消息已读
-// POST message/markreaded
+// PUT message/markreaded
+const markMessageReadedScheme = Joi.object({
+    messageIds: Joi.array().items(Joi.string().length(24)).min(1).required()
+});
+
+router.put('/markreaded',
+    middlewareAuth,
+    middlewareValidate(markMessageReadedScheme, 'body'),
+    async (req, res) => {
+        try {
+            const myUserId = req.noviUser._id;
+            const { messageIds } = req.body;
+            const objectIds = messageIds.map(id => mongoose.Types.ObjectId.createFromHexString(id));
+
+            // 找出哪些消息确实属于当前用户且未读
+            const unreadMessages = await FriendMessage.find({
+                _id: { $in: objectIds },
+                receiver: mongoose.Types.ObjectId.createFromHexString(myUserId),
+                readAt: null
+            }).select('_id').lean();
+
+            if (unreadMessages.length === 0) {
+                return res.status(200).json({
+                    message: '没有可标记的未读消息',
+                    updatedIds: []
+                });
+            }
+
+            const idsToUpdate = unreadMessages.map(m => m._id);
+
+            // 执行批量更新
+            const result = await FriendMessage.updateMany(
+                { _id: { $in: idsToUpdate } },
+                { $set: { readAt: new Date() } }
+            );
+
+            return res.status(200).json({
+                message: '消息已标记为已读',
+                modifiedCount: result.modifiedCount,
+                updatedIds: idsToUpdate
+            });
+        } catch (err) {
+            logger.error(`markreaded error: ${err.message}`);
+            res.status(500).json({ message: err.message });
+        }
+    }
+);
 
 // 接收者确认消息解密成功
 // POST message/crypto/ack
