@@ -114,7 +114,8 @@ router.get('/allfriend', middlewareAuth, async (req, res) => {
 // GET message/pull/unread/byfriend
 const getMessagePullUnreadByFriend = Joi.object({
     sender: Joi.string().trim().min(10).max(100).required(),
-    before: Joi.date().optional() // 允许传时间
+    before: Joi.date().optional(), // 拉取指定时间及其之前的30条
+    after: Joi.date().optional(), // 拉取指定时间及其之后的30条
 });
 router.get('/pull/unread/byfriend',
     middlewareAuth,
@@ -122,7 +123,7 @@ router.get('/pull/unread/byfriend',
     async (req, res) => {
         try {
             const myUserId = req.noviUser._id;
-            const { sender, before } = req.query;
+            const { sender, before, after } = req.query;
 
             const senderId = mongoose.Types.ObjectId.createFromHexString(sender);
             const receiverId = mongoose.Types.ObjectId.createFromHexString(myUserId);
@@ -133,11 +134,22 @@ router.get('/pull/unread/byfriend',
                 const messages = await FriendMessage.find({
                     sender: senderId,
                     receiver: receiverId,
-                    sentAt: { $lt: beforeTime }
+                    sentAt: { $lte: beforeTime }
                 }).sort({ sentAt: -1 }).limit(30).lean();
 
                 // 正序返回
                 return res.status(200).json(messages.reverse());
+            }
+
+            // 如果指定了after,则直接拉取及其之后的30条
+            if (after) {
+                const afterTime = new Date(after);
+                const messages = await FriendMessage.find({
+                    sender: senderId,
+                    receiver: receiverId,
+                    sentAt: { $gte: afterTime }
+                }).sort({ sentAt: 1 }).limit(30).lean();
+                return res.status(200).json(messages);
             }
 
             // 找第一条未读消息
@@ -166,21 +178,22 @@ router.get('/pull/unread/byfriend',
             const previous = prevRaw.reverse();
 
             // 拉取从firstUnread开始的最多30条，包含 firstUnread
-            const after = await FriendMessage.find({
+            const afterUnread = await FriendMessage.find({
                 sender: senderId,
                 receiver: receiverId,
                 sentAt: { $gte: firstUnread.sentAt }
             }).sort({ sentAt: 1 }).limit(30).lean();
 
             // 组合：前30升序+后30升序
-            const all = [...previous, ...after];
+            const all = [...previous, ...afterUnread];
 
             return res.status(200).json(all);
         } catch (err) {
             logger.error(`${err.message}`);
             res.status(500).json({ message: err.message });
         }
-    });
+    }
+);
 
 // 提供一个数组提交消息ID用于确认消息消息已读
 // POST message/markreaded
