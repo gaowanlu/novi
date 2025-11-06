@@ -245,6 +245,51 @@ router.put('/markreaded',
 );
 
 // 接收者确认消息解密成功
-// POST message/crypto/ack
+// PUT message/crypto/ack
+const messageCryptoAckScheme = Joi.object({
+    messageIds: Joi.array().items(Joi.string().length(24)).min(1).required()
+});
+router.put('/crypto/ack',
+    middlewareAuth,
+    middlewareValidate(messageCryptoAckScheme, 'body'),
+    async (req, res) => {
+        try {
+            const myUserId = req.noviUser._id;
+            const { messageIds } = req.body;
+            const objectIds = messageIds.map(id => mongoose.Types.ObjectId.createFromHexString(id));
+
+            // 找出哪些消息确实属于当前用户且未读
+            const unAckMessages = await FriendMessage.find({
+                _id: { $in: objectIds },
+                receiver: mongoose.Types.ObjectId.createFromHexString(myUserId),
+                cryptoAckAt: null
+            }).select('_id').lean();
+
+            if (unAckMessages.length === 0) {
+                return res.status(200).json({
+                    message: '没有可确认解密的消息',
+                    updatedIds: []
+                });
+            }
+
+            const idsToUpdate = unAckMessages.map(m => m._id);
+
+            // 执行批量更新
+            const result = await FriendMessage.updateMany(
+                { _id: { $in: idsToUpdate } },
+                { $set: { cryptoAckAt: new Date() } }
+            );
+
+            return res.status(200).json({
+                message: '消息已标记为已解密',
+                modifiedCount: result.modifiedCount,
+                updatedIds: idsToUpdate
+            });
+        } catch (err) {
+            logger.error(`markreaded error: ${err.message}`);
+            res.status(500).json({ message: err.message });
+        }
+    }
+);
 
 export default router;
