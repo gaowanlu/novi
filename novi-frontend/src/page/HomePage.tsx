@@ -1,0 +1,20 @@
+import { Link } from "react-router-dom";
+
+function HomePage() {
+    return (
+        <>
+            <h1>novi, no way.</h1>
+            <p>Each friendship, a unique encryption pair the platform can never see.</p>
+
+            <ul>
+                <li><Link to="/">首页</Link></li>
+                <li><Link to="/about">关于我们</Link></li>
+                <li><Link to="/signin">登录</Link></li>
+                <li><Link to="/signup">注册</Link></li>
+                <li><Link to="/logout">退出登录</Link></li>
+            </ul>
+        </>
+    );
+}
+
+export default HomePage;
