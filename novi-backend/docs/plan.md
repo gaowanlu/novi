@@ -36,17 +36,17 @@ Socketio 用来做服务端对用户端的事件驱动，避免传递消息，�
 ## 关于Socket.IO推送消息
 
 * 添加好友申请 `novi_friend_request_comming`
-    * 如果对方在线直接推送待处理的好友申请记录
+    * 与自己相关的新的好友申请到来
 * 处理好友申请 `novi_friend_request_processed`
-    * 如果对方在线直接推送好友申请记录结果
+    * 与自己相关的好友申请记录被处理
 * 删除好友 `novi_friend_friend_deleted`
-    * 如果对方在线直接推送被删通知
+    * 自己有相关好友被删除
 * 向好友发送新消息 `novi_friend_message_comming`
-    * 如果对方在线直接推送新消息
+    * 与自己相关的新消息
 * 标记消息为已读 `novi_friend_message_readed`
-    * 如果对方在线直接推送已读状态
+    * 与自己相关的消息被标为已读
 * 消息解密确认 `novi_friend_message_crypto_ack`
-    * 如果对方在线直接推送消息解密确认
+    * 与自己相关的消息被标记为已解密
 
 先入库，然后 读redis取出对方的在线消息，然后通过消息队列将消息发往对方在线的节点服务器，让对方所在的节点服务器将消息推送给对方。
 
