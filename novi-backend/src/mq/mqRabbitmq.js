@@ -71,7 +71,7 @@ function createHeartbeatConsumer() {
                 (msg) => {
                     logger.info(`[RabbitMQ]${QUEUE_HEARTBEAT} Received heartbeat: ${msg.content.toString()}`)
                 },
-                { noAck: true }
+                { noAck: true } // 自动确认
             )
         })
     })
@@ -158,7 +158,7 @@ let rabbitMQNoviNodeChannel = {
                             this.onReceiveStrContentFromNoviNode(msg.content.toString());
                         }
                     },
-                    { noAck: true }
+                    { noAck: true } // 自动确认
                 )
             })
         })
