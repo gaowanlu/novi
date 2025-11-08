@@ -83,4 +83,8 @@ async function start() {
     setInterval(() => producer_run(producer), 10000)
 }
 
-start().catch(err => logger.error(`启动出错: ${err.message}`))
+function mqKafkaInit() {
+    start().catch(err => logger.error(`启动出错: ${err.message}`))
+}
+
+export { mqKafkaInit };
