@@ -64,7 +64,7 @@ async function main() {
 
     if (loginRes.status === 200 && loginRes.json.jwtToken) {
         jwtToken = loginRes.json.jwtToken;
-        console.log('✅ 登录成功，JWT:', jwtToken);
+        console.log('✅ 登录成功，JWT:', loginRes.json);
     } else {
         console.error('❌ 登录失败:', loginRes.json);
         return;
