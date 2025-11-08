@@ -55,12 +55,12 @@ router.post('/', middlewareAuth, middlewareValidate(postFriendMessage), async (r
                 const senderOnlineNode = await redisClient.get(`user:online:${saveNewFriendMessage.sender.toString()}`);
                 if (senderOnlineNode) {
                     noviNodeIPC.sendToNode(senderOnlineNode,
-                        noviNodeIPC.createNewMessage('novi_friend_message_comming', saveNewFriendMessage));
+                        noviNodeIPC.createNewMessage(saveNewFriendMessage.sender.toString(), 'novi_friend_message_comming', saveNewFriendMessage));
                 }
                 const receiverOnlineNode = await redisClient.get(`user:online:${saveNewFriendMessage.receiver.toString()}`);
                 if (receiverOnlineNode) {
                     noviNodeIPC.sendToNode(receiverOnlineNode,
-                        noviNodeIPC.createNewMessage('novi_friend_message_comming', saveNewFriendMessage));
+                        noviNodeIPC.createNewMessage(saveNewFriendMessage.receiver.toString(), 'novi_friend_message_comming', saveNewFriendMessage));
                 }
             } catch (err) {
                 logger.error(`${err.message}`);
@@ -259,12 +259,12 @@ router.put('/markreaded',
                         const senderOnlineNode = await redisClient.get(`user:online:${itemMessage.sender.toString()}`);
                         if (senderOnlineNode) {
                             noviNodeIPC.sendToNode(senderOnlineNode,
-                                noviNodeIPC.createNewMessage('novi_friend_message_readed', itemMessage));
+                                noviNodeIPC.createNewMessage(itemMessage.sender.toString(), 'novi_friend_message_readed', itemMessage));
                         }
                         const receiverOnlineNode = await redisClient.get(`user:online:${itemMessage.receiver.toString()}`);
                         if (receiverOnlineNode) {
                             noviNodeIPC.sendToNode(receiverOnlineNode,
-                                noviNodeIPC.createNewMessage('novi_friend_message_readed', itemMessage));
+                                noviNodeIPC.createNewMessage(itemMessage.receiver.toString(), 'novi_friend_message_readed', itemMessage));
                         }
                     } catch (err) {
                         logger.error(`${err.message}`);
@@ -327,12 +327,12 @@ router.put('/crypto/ack',
                         const senderOnlineNode = await redisClient.get(`user:online:${itemMessage.sender.toString()}`);
                         if (senderOnlineNode) {
                             noviNodeIPC.sendToNode(senderOnlineNode,
-                                noviNodeIPC.createNewMessage('novi_friend_message_crypto_ack', itemMessage));
+                                noviNodeIPC.createNewMessage(itemMessage.sender.toString(), 'novi_friend_message_crypto_ack', itemMessage));
                         }
                         const receiverOnlineNode = await redisClient.get(`user:online:${itemMessage.receiver.toString()}`);
                         if (receiverOnlineNode) {
                             noviNodeIPC.sendToNode(receiverOnlineNode,
-                                noviNodeIPC.createNewMessage('novi_friend_message_crypto_ack', itemMessage));
+                                noviNodeIPC.createNewMessage(itemMessage.receiver.toString(), 'novi_friend_message_crypto_ack', itemMessage));
                         }
                     } catch (err) {
                         logger.error(`${err.message}`);

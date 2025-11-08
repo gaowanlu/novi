@@ -107,9 +107,20 @@ const userConnections = {
             await redisClient.SET(`user:online:${socket.noviUser._id}`, `${process.env.NOVI_NODE}`, { EX: 60 * 5 });
             logger.error(`更新在线状态 user:online:${socket.noviUser._id} ${process.env.NOVI_NODE} 成功`);
             socket.noviUser.latestHeartbeatTimestamp = Date.now();
+
+            this.eventMessageForClientByUserId(socket.noviUser._id, 'noviheartbeat', "");
         } catch (err) {
             logger.error(`WS heartbeat ${err.message}`);
         }
+    },
+
+    eventMessageForClientByUserId(userId, eventName, msg) {
+        let clientSocket = this.userId2Socket.get(userId);
+        if (!clientSocket) {
+            logger.error(`eventMessageForClientByUserId failed userId ${userId} eventName ${eventName} msg ${msg}`);
+            return;
+        }
+        clientSocket.emit(eventName, msg);
     }
 };
 

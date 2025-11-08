@@ -1,6 +1,7 @@
 import { mqKafkaInit } from './mqKafka.js'
 import { mqRabbitMQInit, rabbitMQNoviNodeChannel } from './mqRabbitmq.js'
 import logger from '../logger.js'
+import { userConnections } from '../connections/userConnections.js'
 
 const noviNodeIPC = {
     /**
@@ -24,7 +25,7 @@ const noviNodeIPC = {
         logger.info(`[noviNodeIPC] 初始化完成`);
 
         // setInterval(() => {
-        //     this.sendToNode(1, this.createNewMessage("test", {
+        //     this.sendToNode(1, this.createNewMessage("testUserId", "test", {
         //         data: 'test data'
         //     }));
         // }, 1000);
@@ -47,12 +48,12 @@ const noviNodeIPC = {
             try {
                 message = JSON.parse(json.message);
             } catch (parseErr) {
-                logger.warn(`[noviNodeIPC] message 字段不是合法 JSON: ${json.message}`);
+                logger.error(`[noviNodeIPC] message 字段不是合法 JSON: ${json.message}`);
                 message = json.message; // 尝试当作字符串使用
             }
 
             // 分发到上层处理
-            this.msgFromNoviNode(json.fromNode, json.event, message);
+            this.msgFromNoviNode(json.fromNode, json.forUserId, json.event, message);
         } catch (err) {
             logger.error(`[noviNodeIPC] 解析消息失败: ${err.message} | 原始消息: ${rawMsg}`);
         }
@@ -83,11 +84,12 @@ const noviNodeIPC = {
     /**
      * 创建标准消息格式
      */
-    createNewMessage(event, message) {
+    createNewMessage(forUserId, event, message) {
         try {
             const messageStr = JSON.stringify(message);
             return {
                 fromNode: process.env.NOVI_NODE || 'unknown',
+                forUserId,
                 event,
                 message: messageStr,
                 timestamp: Date.now(),
@@ -101,10 +103,11 @@ const noviNodeIPC = {
     /**
      * 收到其他节点发来的消息
      */
-    msgFromNoviNode(fromNode, event, message) {
+    msgFromNoviNode(fromNode, forUserId, event, message) {
         try {
-            logger.info(`[noviNodeIPC] 收到来自节点 ${fromNode} 的消息 | event=${event} | 内容=${JSON.stringify(message)}`);
+            logger.info(`[noviNodeIPC] 收到来自节点 ${fromNode} 的消息 | forUserId=${forUserId} | event=${event} | 内容=${JSON.stringify(message)}`);
             // 这里可以根据 event 分发到不同的处理逻辑
+            userConnections.eventMessageForClientByUserId(forUserId, event, message);
         } catch (err) {
             logger.error(`[noviNodeIPC] msgFromNoviNode 处理出错: ${err.message}`);
         }

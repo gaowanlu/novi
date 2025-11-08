@@ -114,6 +114,27 @@ async function main() {
             socketIOClient.emit('noviheartbeat', '');
         }, 10000);
     });
+    socketIOClient.on('novi_friend_request_comming', (msg) => {
+        console.log('novi_friend_request_comming', msg);
+    });
+    socketIOClient.on('novi_friend_request_processed', (msg) => {
+        console.log('novi_friend_request_processed', msg);
+    });
+    socketIOClient.on('novi_friend_friend_deleted', (msg) => {
+        console.log('novi_friend_friend_deleted', msg);
+    });
+    socketIOClient.on('novi_friend_message_comming', (msg) => {
+        console.log('novi_friend_message_comming', msg);
+    });
+    socketIOClient.on('novi_friend_message_readed', (msg) => {
+        console.log('novi_friend_message_readed', msg);
+    });
+    socketIOClient.on('novi_friend_message_crypto_ack', (msg) => {
+        console.log('novi_friend_message_crypto_ack', msg);
+    });
+    socketIOClient.on('noviheartbeat', (msg) => {
+        console.log('noviheartbeat', msg);
+    });
 
 
     // 捕获 Ctrl+C 信号

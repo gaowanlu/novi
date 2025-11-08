@@ -60,12 +60,12 @@ router.post(
                     const myOnlineNode = await redisClient.get(`user:online:${myUserId}`);
                     if (myOnlineNode) {
                         noviNodeIPC.sendToNode(myOnlineNode,
-                            noviNodeIPC.createNewMessage('novi_friend_request_comming', saveNewFriendRequest));
+                            noviNodeIPC.createNewMessage(myUserId, 'novi_friend_request_comming', saveNewFriendRequest));
                     }
                     const targetUserOnlineNode = await redisClient.get(`user:online:${targetUserId}`);
                     if (targetUserOnlineNode) {
                         noviNodeIPC.sendToNode(targetUserOnlineNode,
-                            noviNodeIPC.createNewMessage('novi_friend_request_comming', saveNewFriendRequest));
+                            noviNodeIPC.createNewMessage(targetUserId, 'novi_friend_request_comming', saveNewFriendRequest));
                     }
                 } catch (err) {
                     logger.error(`${err.message}`);
@@ -189,12 +189,12 @@ router.put('/request', middlewareAuth, middlewareValidate(putFriendRequest), asy
                 const myOnlineNode = await redisClient.get(`user:online:${friendRequestById.receiver.toString()}`);
                 if (myOnlineNode) {
                     noviNodeIPC.sendToNode(myOnlineNode,
-                        noviNodeIPC.createNewMessage('novi_friend_request_processed', friendRequestById));
+                        noviNodeIPC.createNewMessage(friendRequestById.receiver.toString(), 'novi_friend_request_processed', friendRequestById));
                 }
                 const targetUserOnlineNode = await redisClient.get(`user:online:${friendRequestById.requester.toString()}`);
                 if (targetUserOnlineNode) {
                     noviNodeIPC.sendToNode(targetUserOnlineNode,
-                        noviNodeIPC.createNewMessage('novi_friend_request_processed', friendRequestById));
+                        noviNodeIPC.createNewMessage(friendRequestById.requester.toString(), 'novi_friend_request_processed', friendRequestById));
                 }
             } catch (err) {
                 logger.error(`${err.message}`);
@@ -248,12 +248,12 @@ router.delete('/', middlewareAuth, middlewareValidate(deleteFriend, 'query'), as
                 const requesterOnlineNode = await redisClient.get(`user:online:${deletedFriendRequest.requester.toString()}`);
                 if (requesterOnlineNode) {
                     noviNodeIPC.sendToNode(requesterOnlineNode,
-                        noviNodeIPC.createNewMessage('novi_friend_friend_deleted', deletedFriendRequest));
+                        noviNodeIPC.createNewMessage(deletedFriendRequest.requester.toString(), 'novi_friend_friend_deleted', deletedFriendRequest));
                 }
                 const receiverOnlineNode = await redisClient.get(`user:online:${deletedFriendRequest.receiver.toString()}`);
                 if (receiverOnlineNode) {
                     noviNodeIPC.sendToNode(receiverOnlineNode,
-                        noviNodeIPC.createNewMessage('novi_friend_friend_deleted', deletedFriendRequest));
+                        noviNodeIPC.createNewMessage(deletedFriendRequest.receiver.toString(), 'novi_friend_friend_deleted', deletedFriendRequest));
                 }
             } catch (err) {
                 logger.error(`${err.message}`);
