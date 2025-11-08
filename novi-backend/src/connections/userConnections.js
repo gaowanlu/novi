@@ -62,7 +62,7 @@ const userConnections = {
                 allOnlineUserId.push(k);
             });
             logger.error(`所有在线用户=> 数量 ${allOnlineUserId.length} 用户ID ${allOnlineUserId.join(',')}`);
-        }, 2000);
+        }, 5000);
     },
     async onConnect(socket) {
         logger.error(`用户已连接: socketId ${socket.id} userId ${socket.noviUser._id}`);
