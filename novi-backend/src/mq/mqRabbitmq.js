@@ -11,7 +11,7 @@ function createHeartbeatProducer() {
     amqp.connect(RABBITMQ_URI, (err, connection) => {
         if (err) {
             logger.error(`[RabbitMQ]${QUEUE_HEARTBEAT} 生产者连接失败: ${err.message}`)
-            setTimeout(connectProducer, RECONNECT_DELAY)
+            setTimeout(createHeartbeatProducer, RECONNECT_DELAY)
             return
         }
 
@@ -46,7 +46,7 @@ function createHeartbeatConsumer() {
     amqp.connect(RABBITMQ_URI, (err, connection) => {
         if (err) {
             logger.error(`[RabbitMQ]${QUEUE_HEARTBEAT} 消费者连接失败: ${err.message}`)
-            setTimeout(connectConsumer, RECONNECT_DELAY)
+            setTimeout(createHeartbeatConsumer, RECONNECT_DELAY)
             return
         }
 
@@ -56,7 +56,7 @@ function createHeartbeatConsumer() {
 
         connection.on('close', () => {
             logger.warn(`[RabbitMQ]${QUEUE_HEARTBEAT} 消费者连接断开，${RECONNECT_DELAY}秒后重连...`)
-            setTimeout(connectConsumer, RECONNECT_DELAY)
+            setTimeout(createHeartbeatConsumer, RECONNECT_DELAY)
         })
 
         connection.createChannel((error1, channel) => {
@@ -78,7 +78,7 @@ function createHeartbeatConsumer() {
 }
 
 // 节点之间通信的通道
-let noviNodeChannel = {
+let rabbitMQNoviNodeChannel = {
     producerChannel: null,
     onReceiveStrContentFromNoviNode: null,
     initProducerChannel() {
@@ -86,8 +86,10 @@ let noviNodeChannel = {
             if (err) {
                 logger.error(`[RabbitMQ]${QUEUE_IPC} 生产者连接失败: ${err.message}`)
                 this.producerChannel = null;
-                setTimeout(this.initProducerChannel.bind(this), RECONNECT_DELAY)
-                return
+                setTimeout(() => {
+                    this.initProducerChannel()
+                }, RECONNECT_DELAY)
+                return;
             }
 
             connection.on('error', (err) => {
@@ -98,7 +100,9 @@ let noviNodeChannel = {
             connection.on('close', () => {
                 logger.warn(`[RabbitMQ]${QUEUE_IPC} 生产者连接断开，${RECONNECT_DELAY}秒后重连...`)
                 this.producerChannel = null
-                setTimeout(this.initProducerChannel.bind(this), RECONNECT_DELAY)
+                setTimeout(() => {
+                    this.initProducerChannel();
+                }, RECONNECT_DELAY)
             })
 
             connection.createChannel((error1, channel) => {
@@ -123,7 +127,9 @@ let noviNodeChannel = {
         amqp.connect(RABBITMQ_URI, (err, connection) => {
             if (err) {
                 logger.error(`[RabbitMQ]${QUEUE_IPC} 消费者连接失败: ${err.message}`)
-                setTimeout(this.initConsumerChannel.bind(this), RECONNECT_DELAY)
+                setTimeout(() => {
+                    this.initConsumerChannel();
+                }, RECONNECT_DELAY)
                 return
             }
 
@@ -133,7 +139,9 @@ let noviNodeChannel = {
 
             connection.on('close', () => {
                 logger.warn(`[RabbitMQ]${QUEUE_IPC} 消费者连接断开，${RECONNECT_DELAY}秒后重连...`)
-                setTimeout(this.initConsumerChannel.bind(this), RECONNECT_DELAY)
+                setTimeout(() => {
+                    this.initConsumerChannel();
+                }, RECONNECT_DELAY)
             })
 
             connection.createChannel((error1, channel) => {
@@ -166,7 +174,7 @@ let noviNodeChannel = {
 function mqRabbitMQInit(onReceiveStrContentFromNoviNode) {
     createHeartbeatProducer();
     createHeartbeatConsumer();
-    noviNodeChannel.init(onReceiveStrContentFromNoviNode);
+    rabbitMQNoviNodeChannel.init(onReceiveStrContentFromNoviNode);
 }
 
-export { mqRabbitMQInit, noviNodeChannel };
+export { mqRabbitMQInit, rabbitMQNoviNodeChannel };

@@ -7,8 +7,6 @@ import { middlewareLogger } from './middlewares/middlewareLogger.js'
 import { connectMongo } from './db/dbMongo.js'
 import { connectPostgres } from './db/dbPostgres.js'
 import { connectRedis } from './db/dbRedis.js'
-import { mqKafkaInit } from './mq/mqKafka.js'
-import { mqRabbitMQInit, noviNodeChannel } from './mq/mqRabbitmq.js'
 
 import userRouter from './routes/user.js'
 import orderRouter from './routes/order.js'
@@ -18,6 +16,7 @@ import messageRouter from './routes/message.js';
 
 import http from 'http'
 import { userConnections } from './connections/userConnections.js'
+import { noviNodeIPC } from './mq/noviNodeIPC.js'
 
 const PORT = process.env.NOVI_PORT;
 const HOST = process.env.NOVI_HOST;
@@ -46,14 +45,8 @@ async function startServer() {
     await connectMongo();
     await connectRedis();
     await connectPostgres();
-    mqKafkaInit();
-    mqRabbitMQInit((msgFromNoviNode) => {
-        logger.error(`mqRabbitMQ msgFromNoviNode ${msgFromNoviNode}`);
-        noviNodeChannel.sendToNoviNode(1, "hello world");
-    });
-    // setTimeout(() => {
-    //     noviNodeChannel.sendToNoviNode(1, "hello world");
-    // }, 5000);
+
+    noviNodeIPC.init();
 
     httpServer.listen(PORT, HOST, () => {
         logger.info(`✅ Server running at http://${HOST}:${PORT}`);
