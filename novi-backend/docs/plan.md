@@ -55,3 +55,33 @@ Socketio 用来做服务端对用户端的事件驱动，避免传递消息，�
 ## 这样的服务像什么呢
 
 就是把我们用的通信软件我们直接发的明文，自己加密后再发，读的时候自己先解密再读。不相信现有软件服务对我们个人隐私数据的保护。
+
+## 高级特性（待设计）
+
+将好友之间的消息 像区块链一样连起来
+
+```bash
+preHash   preHash   preHash
+content-->content-->content
+currHash  currHash  currHash
+```
+
+```bash
+minUserId_maxUserId 为分组因子映射到某个 Exchanges的queueName中去处理，每个queueName只能有一个进程消费
+```
+
+消息结构唯一索引
+
+```js
+messageSchema.index(
+  { userId1: 1, userId2: 1, messageSeq: 1 },
+  { unique: true }
+);
+```
+
+写入消息的时候，先读上一个最近消息然后+1作为本次消息seq,可能会失败，失败的话进行一定重试，失败过多则直接发送失败。
+插入失败则要重新计算hash，这样一来服务器无法篡改用户 发送的消息内容 同时也不会删除用户发送消息的item。
+
+如果动了内容，则无法解密出正常内容，服务器偷偷的少送达 重复送达 问题也需要解决
+
+
