@@ -8,10 +8,11 @@ function HomePage() {
 
             <ul>
                 <li><Link to="/">首页</Link></li>
-                <li><Link to="/about">关于我们</Link></li>
                 <li><Link to="/signin">登录</Link></li>
+                <li><Link to="/functional">功能</Link></li>
                 <li><Link to="/signup">注册</Link></li>
                 <li><Link to="/logout">退出登录</Link></li>
+                <li><Link to="/about">关于我们</Link></li>
             </ul>
         </>
     );

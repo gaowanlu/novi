@@ -4,6 +4,7 @@ import HomePage from './HomePage'
 import SigninPage from './SigninPage'
 import SignupPage from './SignupPage'
 import LogoutPage from './LogoutPage'
+import FunctionalPage from './FunctionalPage'
 
 function App() {
   return (
@@ -12,6 +13,7 @@ function App() {
       <Route path="/signin" element={<SigninPage />} />
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/logout" element={<LogoutPage />} />
+      <Route path="/functional" element={<FunctionalPage />} />
       <Route path="/about" element={<AboutPage />} />
     </Routes>
   )
