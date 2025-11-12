@@ -1,6 +1,6 @@
 import './config/loadDotenv.js'
 import logger from './logger.js'
-
+import cors from 'cors'
 import express from 'express'
 
 import { middlewareLogger } from './middlewares/middlewareLogger.js'
@@ -18,8 +18,8 @@ import http from 'http'
 import { userConnections } from './connections/userConnections.js'
 import { noviNodeIPC } from './mq/noviNodeIPC.js'
 
-const PORT = process.env.NOVI_PORT;
-const HOST = process.env.NOVI_HOST;
+const PORT: number = parseInt(process.env.NOVI_PORT ?? '3000', 10)
+const HOST: string | undefined = process.env.NOVI_HOST ?? '0.0.0.0'
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -27,6 +27,15 @@ const httpServer = http.createServer(app);
 userConnections.init(httpServer);
 
 app.use(middlewareLogger)
+
+// 允许所有来源（开发时最宽松）
+app.use(cors());
+// 如果你想更严格一点，只允许特定域名（生产推荐）
+// app.use(cors({
+//   origin: ['http://localhost:3000', 'https://yourdomain.com'],
+//   credentials: true,  // 如果前端要带 cookie
+// }));
+
 app.use(express.json())
 app.use((req, res, next) => {
     logger.info(`[${new Date().toISOString()}] ${req.method} ${req.url}`)
