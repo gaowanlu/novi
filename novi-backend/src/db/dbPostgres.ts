@@ -68,3 +68,4 @@ let connectPostgres = async (): Promise<void> => {
 };
 
 export { pgPool, connectPostgres };
+export type { Order };
