@@ -1,7 +1,7 @@
 import dotenv from 'dotenv'
 
-function loadDotenv(): dotenv.DotenvConfigOutput {
+function loadDotEnv(): dotenv.DotenvConfigOutput {
     return dotenv.config();
 }
 
-loadDotenv();
+loadDotEnv();
