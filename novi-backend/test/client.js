@@ -56,10 +56,9 @@ async function main() {
     }
 
     // 登录
-    const loginEmail = '2209120827@qq.com'; // 登录邮箱
     const loginRes = await postJson(LOGIN_URL, {
-        email: loginEmail,
-        password: '123456789'
+        email: userData.email,
+        password: userData.password
     });
 
     if (loginRes.status === 200 && loginRes.json.jwtToken) {
