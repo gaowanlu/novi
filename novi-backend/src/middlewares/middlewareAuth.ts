@@ -3,6 +3,7 @@ import { redisClient } from "../db/dbRedis.js";
 import logger from "../logger.js";
 import type { NextFunction, Response } from 'express'
 import type { IRequest } from "../comm/request.js";
+import { NoviUser } from "../comm/noviUser.js";
 
 const JWT_SECRET = process.env.NOVI_JWT_SECRET as string;
 
@@ -29,7 +30,7 @@ async function middlewareAuth(req: IRequest, res: Response, next: NextFunction):
         }
         const token = tokenParts[1];
 
-        const decoded: JwtPayload = jwt.verify(token, JWT_SECRET) as JwtPayload;
+        const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
 
         // 从Redis验证是否还有效
         const cacheToken = await redisClient.get(`user:auth:${decoded._id}`);
@@ -37,8 +38,10 @@ async function middlewareAuth(req: IRequest, res: Response, next: NextFunction):
             res.status(401).json({ message: 'Token已失效' });
             return;
         }
-        req.noviUser = decoded;
+
+        req.noviUser = decoded as NoviUser;
         next();
+
     } catch (err) {
         logger.error(`${err instanceof Error ? err.message : '未知错误'}`);
         res.status(401).json({ message: 'Token无效或过期' });

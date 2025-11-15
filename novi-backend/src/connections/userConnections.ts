@@ -2,12 +2,7 @@ import { Server, Socket } from 'socket.io'
 import logger from '../logger.js';
 import { redisClient } from "../db/dbRedis.js";
 import jwt from 'jsonwebtoken';
-
-// JWT 解码后的用户信息接口
-interface NoviUser {
-    _id: string
-    [key: string]: any
-}
+import type { NoviUser } from '../comm/noviUser.js';
 
 // 扩展 Socket 接口，添加自定义属性
 interface NoviSocket extends Socket {

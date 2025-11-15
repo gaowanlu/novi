@@ -1,12 +1,8 @@
 import type { Request } from 'express'
-
-interface NoviUser {
-    _id?: string,
-    [key: string]: any,
-}
+import type { NoviUser } from './noviUser.js'
 
 interface IRequest extends Request {
     noviUser?: NoviUser | undefined
 }
 
-export type { NoviUser, IRequest };
+export type { IRequest };
