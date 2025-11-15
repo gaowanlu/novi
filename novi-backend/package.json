@@ -29,9 +29,11 @@
     "winston-daily-rotate-file": "^5.0.0"
   },
   "devDependencies": {
+    "@types/amqplib": "^0.10.8",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.5",
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/kafkajs": "^1.8.2",
     "@types/node": "^24.10.1",
     "@types/pg": "^8.15.6",
     "@typescript-eslint/eslint-plugin": "^8.46.4",

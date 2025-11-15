@@ -1,5 +1,5 @@
 import { mqKafkaInit } from './mqKafka.js'
-import { mqRabbitMQInit, rabbitMQNoviNodeChannel } from './mqRabbitmq.js'
+import { mqRabbitMQInit, rabbitMQNoviNodeChannel } from './mqRabbitMQ.js'
 import logger from '../logger.js'
 import { userConnections } from '../connections/userConnections.js'
 
