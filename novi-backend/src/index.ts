@@ -1,4 +1,4 @@
-import './config/loadDotenv.js'
+import './config/loadDotEnv.js'
 import logger from './logger.js'
 import cors from 'cors'
 import express from 'express'
