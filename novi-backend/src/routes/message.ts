@@ -149,16 +149,15 @@ const getMessagePullUnreadByFriend = Joi.object({
 const getMessagePullUnreadByFriendHandler: RequestHandler = async (req: IRequest, res: Response): Promise<void> => {
     try {
         const myUserId = req.noviUser?._id as string;
-        const sender = req.query.sender as string;
-        const before = req.query.before as string;
-        const after = req.query.after as string;
 
-        const senderId = mongoose.Types.ObjectId.createFromHexString(sender);
+        const queryObj = req.query as { sender: string, before: string, after: string };
+
+        const senderId = mongoose.Types.ObjectId.createFromHexString(queryObj.sender);
         const receiverId = mongoose.Types.ObjectId.createFromHexString(myUserId);
 
         // 如果指定了before,则直接拉取历史消息
-        if (before) {
-            const beforeTime = new Date(before);
+        if (queryObj.before) {
+            const beforeTime = new Date(queryObj.before);
             const messages = await FriendMessage.find({
                 sender: senderId,
                 receiver: receiverId,
@@ -171,8 +170,8 @@ const getMessagePullUnreadByFriendHandler: RequestHandler = async (req: IRequest
         }
 
         // 如果指定了after,则直接拉取及其之后的30条
-        if (after) {
-            const afterTime = new Date(after);
+        if (queryObj.after) {
+            const afterTime = new Date(queryObj.after);
             const messages = await FriendMessage.find({
                 sender: senderId,
                 receiver: receiverId,
