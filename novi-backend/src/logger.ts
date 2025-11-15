@@ -24,7 +24,7 @@ const callerInfo: winston.Logform.FormatWrap = winston.format((
 /**
  * 日志输出格式定义
  */
-const logFormat = winston.format.printf((info: winston.Logform.TransformableInfo) => {
+const logFormat: winston.Logform.Format = winston.format.printf((info: winston.Logform.TransformableInfo): string => {
     const { timestamp, level, message, location } = info as any
     return `[${timestamp}] ${level.toUpperCase()}${location ? ` (${location})` : ''}: ${message}`
 })
