@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import FriendPannel from "../components/FriendPannel"
 import MessagePannel from '../components/MessagePannel'
 import { apiFetch } from "../api/request";
-import { ApiMacro } from "../api/ApiMacro";
+import { APIMacro } from "../api/APIMacro";
 import { useAuth } from "../context/AuthContext";
 
 function FunctionalPage() {
@@ -10,7 +10,7 @@ function FunctionalPage() {
     const { user } = useAuth();
 
     const refreshFriendList = async () => {
-        const res = await apiFetch(ApiMacro.GETFRIEND, {
+        const res = await apiFetch(APIMacro.GETFRIEND, {
             method: 'GET'
         });
         if (!res.ok) {

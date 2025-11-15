@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ApiMacro } from '../api/ApiMacro';
+import { APIMacro } from '../api/APIMacro';
 import { apiFetch } from '../api/request';
 import { useAuth } from '../context/AuthContext';
 
@@ -16,7 +16,7 @@ function SigninPage() {
         setMsg('');
 
         try {
-            const res = await apiFetch(ApiMacro.LOGIN, {
+            const res = await apiFetch(APIMacro.LOGIN, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

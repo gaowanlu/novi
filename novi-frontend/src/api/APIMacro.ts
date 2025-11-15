@@ -4,7 +4,7 @@ const SIGNUP = `/api/user`;
 const LOGOUT = `/api/auth/logout`;
 const GETFRIEND = `/api/friend`;
 
-const ApiMacro = {
+const APIMacro = {
     HOST,
     LOGIN: `${HOST}${LOGIN}`,
     SIGNUP: `${HOST}${SIGNUP}`,
@@ -12,4 +12,4 @@ const ApiMacro = {
     GETFRIEND: `${HOST}${GETFRIEND}`
 };
 
-export { ApiMacro };
+export { APIMacro };

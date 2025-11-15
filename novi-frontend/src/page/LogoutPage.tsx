@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ApiMacro } from '../api/ApiMacro';
+import { APIMacro } from '../api/APIMacro';
 import { apiFetch } from '../api/request';
 import { useAuth } from '../context/AuthContext';
 
@@ -14,7 +14,7 @@ function LogoutPage() {
         setMsg('');
 
         try {
-            const res = await apiFetch(ApiMacro.LOGOUT, {
+            const res = await apiFetch(APIMacro.LOGOUT, {
                 method: 'GET'
             });
 
@@ -38,6 +38,7 @@ function LogoutPage() {
     return (
         <>
             <h1>LogoutPage</h1>
+            {loading && <p>登出中...</p>}
 
             {token && <p>token: {token}</p>}
             {user && <p>userId: {user.userId} userName: {user.userName} email: {user.email}</p>}

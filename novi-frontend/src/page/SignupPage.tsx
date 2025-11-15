@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ApiMacro } from '../api/ApiMacro';
+import { APIMacro } from '../api/APIMacro';
 import { apiFetch } from '../api/request';
 
 function SignupPage() {
@@ -15,7 +15,7 @@ function SignupPage() {
         setMsg('');
 
         try {
-            const res = await apiFetch(ApiMacro.SIGNUP, {
+            const res = await apiFetch(APIMacro.SIGNUP, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
