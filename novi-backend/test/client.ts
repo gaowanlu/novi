@@ -13,11 +13,11 @@ const userData = {
     password: '123456789'
 };
 
-let jwtToken = null;
-let heartbeatTimer = null;
+let jwtToken: string | null = null;
+let heartbeatTimer: NodeJS.Timeout | null = null;
 
 // POST 请求封装
-async function postJson(url, data, headers = {}) {
+async function postJson(url: string, data: any, headers = {}) {
     try {
         const res = await fetch(url, {
             method: 'POST',
@@ -33,7 +33,7 @@ async function postJson(url, data, headers = {}) {
 }
 
 // GET 请求封装
-async function getRequest(url, headers = {}) {
+async function getRequest(url: string, headers = {}) {
     try {
         const res = await fetch(url, { headers });
         const json = await res.json();
@@ -92,7 +92,9 @@ async function main() {
             console.log('❤️ 心跳成功:', new Date().toLocaleString());
         } else {
             console.error('💔 心跳失败:', res.json);
-            clearInterval(heartbeatTimer);
+            if (heartbeatTimer) {
+                clearInterval(heartbeatTimer);
+            }
         }
     }
 
@@ -100,6 +102,10 @@ async function main() {
     heartbeatTimer = setInterval(heartbeat, 2 * 60 * 1000);
 
     // 创建socket.io客户端
+    if (!jwtToken) {
+        throw new Error(`!jwtToken`)
+    }
+
     const socketIOClient = await testUserConnect(jwtToken);
     socketIOClient.on("connect", () => {
         console.log("✅ 已成功连接到服务器");
@@ -171,7 +177,7 @@ async function logout() {
 }
 
 // socket.io
-async function testUserConnect(token) {
+async function testUserConnect(token: string) {
     const socket = io(BASE_URL, {
         path: "/api/ws",
         auth: {
