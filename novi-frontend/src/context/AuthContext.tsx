@@ -10,6 +10,7 @@ interface AuthContextType {
     user: any;
     login: (token: string, user: any) => void;
     logout: () => void;
+    updateEmailAndUserName: (email: string, userName: string) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -33,8 +34,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         window.location.href = '/signin';
     };
 
+    const updateEmailAndUserName = (email: string, userName: string) => {
+        const newUserInfo = { ...user };
+        newUserInfo.email = email;
+        newUserInfo.userName = userName;
+        setUser(newUserInfo);
+        localStorage.setItem('userInfo', JSON.stringify(newUserInfo));
+    }
+
     return (
-        <AuthContext.Provider value={{ token, user, login, logout }}>
+        <AuthContext.Provider value={{ token, user, login, logout, updateEmailAndUserName }}>
             {children}
         </AuthContext.Provider>
     );

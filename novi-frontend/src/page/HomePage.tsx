@@ -12,6 +12,7 @@ function HomePage() {
                 <li><Link to="/functional">功能</Link></li>
                 <li><Link to="/signup">注册</Link></li>
                 <li><Link to="/logout">退出登录</Link></li>
+                <li><Link to="/user/info">个人信息</Link></li>
                 <li><Link to="/about">关于我们</Link></li>
             </ul>
         </>
