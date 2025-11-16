@@ -6,6 +6,7 @@ import SignupPage from './SignupPage'
 import LogoutPage from './LogoutPage'
 import FunctionalPage from './FunctionalPage'
 import UserInfoPage from './UserInfoPage'
+import NewFriendPage from './NewFriendPage'
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
       <Route path="/logout" element={<LogoutPage />} />
       <Route path="/functional" element={<FunctionalPage />} />
       <Route path="/user/info" element={<UserInfoPage />} />
+      <Route path="/new/friend" element={<NewFriendPage />} />
       <Route path="/about" element={<AboutPage />} />
     </Routes>
   )
