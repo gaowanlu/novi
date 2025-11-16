@@ -2,6 +2,8 @@ import './config/loadDotEnv.js'
 import logger from './logger.js'
 import cors from 'cors'
 import express from 'express'
+import type { Response, NextFunction } from 'express'
+import type { IRequest } from './comm/request.js'
 
 import { middlewareLogger } from './middlewares/middlewareLogger.js'
 import { connectMongo } from './db/dbMongo.js'
@@ -17,9 +19,11 @@ import messageRouter from './routes/message.js';
 import http from 'http'
 import { userConnections } from './connections/userConnections.js'
 import { noviNodeIPC } from './mq/noviNodeIPC.js'
+import path from 'path'
 
 const PORT: number = parseInt(process.env.NOVI_PORT ?? '3000', 10)
 const HOST: string | undefined = process.env.NOVI_HOST ?? '0.0.0.0'
+const EXPRESS_STATIC_PATH: string = process.env.EXPRESS_STATIC_PATH ?? ''
 
 const app = express();
 const httpServer = http.createServer(app);
@@ -36,12 +40,17 @@ app.use(cors());
 //   credentials: true,  // 如果前端要带 cookie
 // }));
 
+// 静态资源目录
+if (EXPRESS_STATIC_PATH) {
+    app.use(express.static(EXPRESS_STATIC_PATH));
+}
+
 app.use(express.json())
-app.use((req, res, next) => {
+app.use((req: IRequest, res: Response, next: NextFunction) => {
     logger.info(`[${new Date().toISOString()}] ${req.method} ${req.url}`)
     next()
 })
-app.get('/', (req, res) => {
+app.get('/', (req: IRequest, res: Response) => {
     res.send('Hello novi 🚀')
 });
 app.use('/api/user', userRouter);
@@ -49,6 +58,12 @@ app.use('/api/order', orderRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/friend', friendRouter);
 app.use('/api/message', messageRouter);
+
+if (EXPRESS_STATIC_PATH) {
+    app.get(/.*/, (req: IRequest, res: Response) => {
+        res.sendFile(path.join(EXPRESS_STATIC_PATH, "index.html"));
+    });
+}
 
 async function startServer() {
     await connectMongo();
