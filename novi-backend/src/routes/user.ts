@@ -78,14 +78,21 @@ const postUserFindSchema = Joi.object({
 });
 const postUserFindHandler: RequestHandler = async (req: IRequest, res: Response): Promise<void> => {
     try {
-        const { userName, email, _id } = req.body;
+        const { userName, _id } = req.body;
 
-        const users = await User.find({
-            $or: [
-                { _id },
-                { userName }
-            ]
-        }).select('_id userName');
+        const conditions: any[] = [];
+        if (_id && _id.trim() !== '') {
+            conditions.push({ _id });
+        }
+        if (userName && userName.trim() !== '') {
+            conditions.push({ userName });
+        }
+        if (conditions.length === 0) {
+            res.status(400).json({ message: '至少需要提供 userName 或 _id' });
+            return;
+        }
+
+        const users = await User.find(conditions.length > 0 ? { $or: conditions } : {}).select('_id userName');
 
         res.status(200).json(users);
     } catch (err: any) {
