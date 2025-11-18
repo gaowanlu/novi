@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { APIMacro } from '../api/APIMacro';
 import { apiFetch } from '../api/request';
 import { useAuth } from '../context/AuthContext';
+import { Button } from '@/components/ui/button';
 
 function SigninPage() {
     const [email, setEmail] = useState('');
@@ -70,9 +71,9 @@ function SigninPage() {
                     />
                 </div>
 
-                <button type="submit" disabled={loading}>
+                <Button type="submit" disabled={loading}>
                     {loading ? '登录中...' : '登录'}
-                </button>
+                </Button>
             </form>
         </>
     );
