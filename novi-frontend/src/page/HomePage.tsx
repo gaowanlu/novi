@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 function HomePage() {
     return (
         <>
-            <h1>novi, no way.</h1>
+            <h1 className="text-3xl font-bold underline">novi, no way.</h1>
             <p>Each friendship, a unique encryption pair the platform can never see.</p>
 
             <ul>
