@@ -165,7 +165,7 @@ function NewFriendPage() {
                                     </ItemDescription>
                                 </ItemContent>
                                 <ItemActions>
-                                    <Button onClick={(e: any) => handleAddNewFriendRequest(item._id, item.userName)} size="sm" className='cursor-pointer'>
+                                    <Button onClick={() => handleAddNewFriendRequest(item._id, item.userName)} size="sm" className='cursor-pointer'>
                                         申请添加为好友
                                     </Button>
                                 </ItemActions>
