@@ -16,14 +16,15 @@ interface FriendItem {
 interface FriendPannelProps {
   style?: React.CSSProperties,
   friendList?: FriendItem[],
-  user?: any
+  user?: any,
+  className?: string
 }
 
-function FriendPannel({ style, friendList = [], user }: FriendPannelProps) {
+function FriendPannel({ style, friendList = [], user, className }: FriendPannelProps) {
   const myUserId = user ? user.userId : '';
 
   return (
-    <div style={{ ...style, padding: '10px' }}>
+    <div style={{ ...style, padding: '10px' }} className={className}>
       <p>我的好友</p>
       {friendList.length === 0 ? (
         <p>暂无好友</p>

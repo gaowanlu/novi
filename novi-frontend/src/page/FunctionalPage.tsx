@@ -31,9 +31,9 @@ function FunctionalPage() {
     return (
         <>
             <h1>FunctionalPage</h1>
-            <div style={{ 'display': 'flex', 'justifyContent': 'center' }}>
-                <FriendPannel style={{ 'width': '50%' }} friendList={friendList} user={user} />
-                <MessagePannel style={{ 'width': '50%' }} />
+            <div className="grid grid-cols-6">
+                <FriendPannel className="col-span-2 col-start-2" friendList={friendList} user={user} />
+                <MessagePannel className="col-span-2 col-start-4" />
             </div>
         </>
     )

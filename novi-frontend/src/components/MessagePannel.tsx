@@ -1,13 +1,14 @@
 import React from 'react'
 
 interface MessagePannelProps {
-    style?: React.CSSProperties
+    style?: React.CSSProperties,
+    className?: string
 }
 
-function MessagePannel({ style }: MessagePannelProps) {
+function MessagePannel({ style, className }: MessagePannelProps) {
     return (
-        <div style={style}>
-            <h2>MessagePannel</h2>
+        <div style={style} className={className}>
+            <h2>消息</h2>
         </div>
     )
 }

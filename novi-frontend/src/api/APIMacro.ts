@@ -5,6 +5,8 @@ const LOGOUT = `/api/auth/logout`;
 const GETFRIEND = `/api/friend`;
 const PUTUSER = `/api/user`;
 const USERFIND = `/api/user/find`;
+const POSTFRIENDREQUEST = `/api/friend/request`;
+const GETFRIENDREQUEST = `/api/friend/request`;
 
 const APIMacro = {
     HOST,
@@ -13,7 +15,9 @@ const APIMacro = {
     LOGOUT: `${HOST}${LOGOUT}`,
     GETFRIEND: `${HOST}${GETFRIEND}`,
     PUTUSER: `${HOST}${PUTUSER}`,
-    USERFIND: `${HOST}${USERFIND}`
+    USERFIND: `${HOST}${USERFIND}`,
+    POSTFRIENDREQUEST: `${HOST}${POSTFRIENDREQUEST}`,
+    GETFRIENDREQUEST: `${HOST}${GETFRIENDREQUEST}`
 };
 
 export { APIMacro };
