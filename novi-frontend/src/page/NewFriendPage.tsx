@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { APIMacro } from '../api/APIMacro';
-import { apiFetch } from '../api/request';
+import { APIMacro } from '@/api/APIMacro';
+import { apiFetch } from '@/api/request';
+import { useAuth } from '@/context/AuthContext';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -10,65 +12,56 @@ import {
     ItemDescription,
     ItemTitle
 } from "@/components/ui/item";
-import { toast } from "sonner"
-// import { useAuth } from '../context/AuthContext';
+import { ButtonGroup } from "@/components/ui/button-group";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { motion } from "framer-motion";
+import { Search, UserPlus, Users } from "lucide-react";
+import { toast } from "sonner";
 
 interface SearchUserResult {
-    userName: string
-    _id: string
+    userName: string;
+    _id: string;
 }
 
 interface FriendRequestResult {
-    friendRequestId: string,
-    createdAt: string,
-    status: string,
+    friendRequestId: string;
+    createdAt: string;
+    status: string;
     requester: {
-        userId: string,
-        userName: string
-    },
+        userId: string;
+        userName: string;
+    };
     receiver: {
-        userId: string,
-        userName: string
-    }
+        userId: string;
+        userName: string;
+    };
 }
 
-function NewFriendPage() {
-    // const { user } = useAuth();
-    const [searching, setSearching] = useState<boolean>(false);
-    const [searchUserId, setSearchUserId] = useState<string>('');
-    const [searchUserName, setSearchUserName] = useState<string>('');
+export default function NewFriendPage() {
+    const { user } = useAuth();
+    const [searching, setSearching] = useState(false);
+    const [searchUserId, setSearchUserId] = useState('');
+    const [searchUserName, setSearchUserName] = useState('');
     const [msg, setMsg] = useState('');
     const [searchUserResultList, setSearchUserResultList] = useState<SearchUserResult[]>([]);
     const [friendRequestResultList, setFriendRequestResultList] = useState<FriendRequestResult[]>([]);
 
     const handleSearchUserSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        console.log('搜索', { searchUserId, searchUserName });
         setSearching(true);
-
         try {
             const res = await apiFetch(APIMacro.USERFIND, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ _id: searchUserId, userName: searchUserName })
             });
             const data = await res.json();
-
             if (res.ok) {
-                console.log('搜索结果', data);
-                const newSearchUserResultList = data as SearchUserResult[];
-                newSearchUserResultList.forEach(searchUser => {
-                    console.log(searchUser);
-                });
-                setSearchUserResultList(newSearchUserResultList);
-
+                setSearchUserResultList(data);
             } else {
-                console.error(data.message);
                 setMsg(data.message);
             }
-
         } catch (err: any) {
             console.error(err);
         } finally {
@@ -76,44 +69,19 @@ function NewFriendPage() {
         }
     };
 
-    const handleAddNewFriendRequest = async (_id: string, userName: string) => {
-        console.log({ _id, userName });
-
+    const handleAddNewFriendRequest = async (_id: string) => {
         try {
             const res = await apiFetch(APIMacro.POSTFRIENDREQUEST, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ targetUserId: _id })
             });
             const data = await res.json();
             if (res.ok) {
-                console.log('发起好友申请结果', data);
-                toast.success("Appling successful", {
-                    description: (
-                        <span className="text-green-400">
-                            {JSON.stringify(data)}
-                        </span>
-                    ),
-                    action: {
-                        label: "Undo",
-                        onClick: () => console.log("Undo"),
-                    },
-                });
+                toast.success("申请成功");
                 handleGetFriendRequest();
             } else {
-                toast.error("Apply failed", {
-                    description: (
-                        <span className="text-red-400">
-                            {data.message}
-                        </span>
-                    ),
-                    action: {
-                        label: "Undo",
-                        onClick: () => console.log("Undo"),
-                    },
-                });
+                toast.error(data.message);
             }
         } catch (err: any) {
             console.log(err);
@@ -122,19 +90,65 @@ function NewFriendPage() {
 
     const handleGetFriendRequest = async () => {
         try {
-            const res = await apiFetch(APIMacro.GETFRIENDREQUEST, {
-                method: 'GET'
-            });
+            const res = await apiFetch(APIMacro.GETFRIENDREQUEST, { method: 'GET' });
             const data = await res.json();
             if (res.ok) {
-                console.log(data);
-                const newFriendRequestResultList = data as FriendRequestResult[];
-                setFriendRequestResultList(newFriendRequestResultList);
-            } else {
-                console.error(data.message);
+                setFriendRequestResultList(data.reverse());
             }
         } catch (err: any) {
             console.log(err);
+        }
+    };
+
+    const handleDeleteFriend = async (targetUserId: string, friendRequestId: string) => {
+        try {
+            const res = await apiFetch(
+                `${APIMacro.DELETEFRIEND}?targetUserId=${targetUserId}&&friendRequestId=${friendRequestId}`,
+                { method: 'DELETE' }
+            );
+            const data = await res.json();
+            if (res.ok) {
+                handleGetFriendRequest();
+            } else {
+                toast.error(data.message);
+            }
+        } catch (err: any) {
+            console.error(err);
+        }
+    };
+
+    const handleDeleteFriendRequest = async (friendRequestId: string) => {
+        try {
+            const res = await apiFetch(
+                `${APIMacro.DELETEFRIENDREQUEST}?friendRequestId=${friendRequestId}`,
+                { method: 'DELETE' }
+            );
+            const data = await res.json();
+            if (res.ok) {
+                handleGetFriendRequest();
+            } else {
+                toast.error(data.message);
+            }
+        } catch (err: any) {
+            console.error(err);
+        }
+    };
+
+    const handlePutFriendRequest = async (friendRequestId: string, status: string) => {
+        try {
+            const res = await apiFetch(APIMacro.PUTFRIENDREQUEST, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ friendRequestId, status })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                handleGetFriendRequest();
+            } else {
+                toast.error(data.message);
+            }
+        } catch (err: any) {
+            console.error(err);
         }
     };
 
@@ -143,56 +157,143 @@ function NewFriendPage() {
     }, []);
 
     return (
-        <>
-            <h1>NewFriendPage</h1>
-            {msg && <p>{msg}</p>}
-            <div>
-                <h2>搜索用户</h2>
-                <div className='p-2'>
-                    <form onSubmit={handleSearchUserSubmit} className='flex flex-col gap-2'>
-                        <Input type='text' placeholder='用户ID' value={searchUserId} onChange={(e) => setSearchUserId(e.target.value)} />
-                        <Input type='text' placeholder='用户名' value={searchUserName} onChange={(e) => setSearchUserName(e.target.value)} />
-                        <Button type='submit'>{searching ? '搜索中' : '搜索'}</Button>
-                    </form>
-                    <div className="flex w-full flex-col gap-6 pt-2">
-                        {searchUserResultList.length === 0 && <p>暂无内容</p>}
-                        {searchUserResultList.map((item: SearchUserResult) => {
-                            return <Item key={item._id} variant="outline">
-                                <ItemContent>
-                                    <ItemTitle>{item.userName}</ItemTitle>
-                                    <ItemDescription>
-                                        {item._id}
-                                    </ItemDescription>
-                                </ItemContent>
-                                <ItemActions>
-                                    <Button onClick={() => handleAddNewFriendRequest(item._id, item.userName)} size="sm" className='cursor-pointer'>
-                                        申请添加为好友
-                                    </Button>
-                                </ItemActions>
+        <div className="min-h-screen p-6 bg-linear-to-b from-white to-gray-100 flex items-center justify-center">
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="w-full max-w-4xl space-y-8"
+            >
+
+                {/* 顶部标题 */}
+                <div className="text-center space-y-2">
+                    <h1 className="text-4xl font-extrabold tracking-tight text-gray-900 flex items-center justify-center gap-2">
+                        <UserPlus className="w-8 h-8 text-gray-700" />
+                        新朋友
+                    </h1>
+                    <p className="text-gray-500">查找用户 · 发送好友请求 · 管理你的关系</p>
+                </div>
+
+                {/* 搜索区域 */}
+                <Card className="rounded-2xl">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-xl">
+                            <Search className="w-5 h-5" />
+                            搜索用户
+                        </CardTitle>
+                        <p>{msg}</p>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <form onSubmit={handleSearchUserSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <Input
+                                placeholder="用户ID"
+                                value={searchUserId}
+                                onChange={(e) => setSearchUserId(e.target.value)}
+                            />
+                            <Input
+                                placeholder="用户名"
+                                value={searchUserName}
+                                onChange={(e) => setSearchUserName(e.target.value)}
+                            />
+                            <Button type="submit" className="w-full">
+                                {searching ? "搜索中..." : "搜索"}
+                            </Button>
+                        </form>
+
+                        <Separator />
+
+                        <div className="flex flex-col gap-4">
+                            {searchUserResultList.length === 0 && (
+                                <p className="text-sm text-gray-500 text-center">暂无搜索结果</p>
+                            )}
+
+                            {searchUserResultList.map((item) => (
+                                <Item key={item._id} variant="outline" className="p-4 rounded-xl">
+                                    <ItemContent>
+                                        <ItemTitle className="font-semibold text-gray-900">{item.userName}</ItemTitle>
+                                        <ItemDescription className="text-gray-500">
+                                            {item._id}
+                                        </ItemDescription>
+                                    </ItemContent>
+                                    <ItemActions>
+                                        <Button
+                                            onClick={() => handleAddNewFriendRequest(item._id)}
+                                            size="sm"
+                                            className="bg-gray-900 text-white hover:bg-black"
+                                        >
+                                            添加好友
+                                        </Button>
+                                    </ItemActions>
+                                </Item>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* 好友请求区域 */}
+                <Card className="rounded-2xl">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-xl">
+                            <Users className="w-5 h-5" />
+                            申请管理
+                        </CardTitle>
+                    </CardHeader>
+
+                    <CardContent className="space-y-4">
+                        {friendRequestResultList.map((item) => (
+                            <Item key={item.friendRequestId} variant="outline" className="p-4 rounded-xl flex-col items-start">
+                                <div className="flex flex-col gap-1 text-sm text-gray-700">
+                                    <p><strong>发起者：</strong>{item.requester.userId} · {item.requester.userName}</p>
+                                    <p><strong>接收者：</strong>{item.receiver.userId} · {item.receiver.userName}</p>
+                                    <p><strong>状态：</strong>{item.status}</p>
+                                    <p><strong>创建时间：</strong>{item.createdAt}</p>
+                                </div>
+
+                                <ButtonGroup className="flex w-full justify-end pt-3">
+                                    {user.userId === item.receiver.userId && item.status === "pending" && (
+                                        <>
+                                            <Button
+                                                variant="outline"
+                                                onClick={() => handlePutFriendRequest(item.friendRequestId, 'accepted')}
+                                            >
+                                                同意
+                                            </Button>
+
+                                            <Button
+                                                variant="outline"
+                                                onClick={() => handlePutFriendRequest(item.friendRequestId, 'rejected')}
+                                            >
+                                                拒绝
+                                            </Button>
+                                        </>
+                                    )}
+
+                                    {user.userId === item.requester.userId && item.status === "pending" && (
+                                        <Button variant="outline" onClick={() => handleDeleteFriendRequest(item.friendRequestId)}>
+                                            撤销
+                                        </Button>
+                                    )}
+
+                                    {item.status === 'accepted' && (
+                                        <Button
+                                            variant="outline"
+                                            onClick={() =>
+                                                handleDeleteFriend(
+                                                    user.userId === item.receiver.userId ? item.requester.userId : item.receiver.userId,
+                                                    item.friendRequestId
+                                                )
+                                            }
+                                        >
+                                            删除好友关系
+                                        </Button>
+                                    )}
+                                </ButtonGroup>
+
                             </Item>
-                        })}
-                    </div>
-                </div>
-            </div>
-            <div>
-                <h2>申请管理</h2>
-                <div className='flex flex-col gap-2 p-2'>
-                    {friendRequestResultList.map((item: FriendRequestResult) => {
-                        return <Item key={item.friendRequestId} variant="outline">
-                            <p>发起者: {item.requester.userId} | {item.requester.userName}</p>
-                            <p>接收者: {item.receiver.userId} | {item.receiver.userName}</p>
-                            <p>状态: {item.status}</p>
-                            <p>创建时间: {item.createdAt}</p>
-                            <Button>同意</Button>
-                            <Button>拒绝</Button>
-                            <Button>撤销</Button>
-                            <Button>删除好友关系</Button>
-                        </Item>
-                    })}
-                </div>
-            </div>
-        </>
+                        ))}
+                    </CardContent>
+                </Card>
+
+            </motion.div>
+        </div>
     );
 }
-
-export default NewFriendPage;

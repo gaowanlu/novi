@@ -9,6 +9,7 @@ import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader,
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 
 function SigninPage() {
@@ -67,7 +68,7 @@ function SigninPage() {
                         Each friendship, a unique encryption pair the platform can never see.
                     </CardDescription>
                     <CardAction>
-                        <Button variant="link">Sign Up</Button>
+                        <Link to="/signup"><Button variant="link">sign up?</Button></Link>
                     </CardAction>
                 </CardHeader>
                 <CardContent>

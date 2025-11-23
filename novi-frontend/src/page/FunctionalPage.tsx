@@ -1,42 +1,50 @@
-import { useEffect, useState } from "react"
-import FriendPannel from "../components/FriendPannel"
-import MessagePannel from '../components/MessagePannel'
-import { apiFetch } from "../api/request";
-import { APIMacro } from "../api/APIMacro";
-import { useAuth } from "../context/AuthContext";
+import { useEffect, useState } from "react";
+import FriendPanel from "@/components/FriendPannel";
+import MessagePanel from "@/components/MessagePannel";
+import { apiFetch } from "@/api/request";
+import { APIMacro } from "@/api/APIMacro";
+import { useAuth } from "@/context/AuthContext";
 
 function FunctionalPage() {
     const [friendList, setFriendList] = useState([]);
+    const [currentFriend, setCurrentFriend] = useState(null);
+
     const { user } = useAuth();
 
     const refreshFriendList = async () => {
         const res = await apiFetch(APIMacro.GETFRIEND, {
-            method: 'GET'
+            method: "GET",
         });
-        if (!res.ok) {
-            return;
-        }
-        const body = await res.json();
 
+        if (!res.ok) return;
+
+        const body = await res.json();
         setFriendList(body);
 
-        // console.log(body);
+        // 默认选中第一个好友
+        if (body.length > 0) {
+            setCurrentFriend(body[0]);
+        }
     };
 
     useEffect(() => {
         refreshFriendList();
-        return () => { };
     }, []);
 
     return (
-        <>
-            <h1>FunctionalPage</h1>
-            <div className="grid grid-cols-6">
-                <FriendPannel className="col-span-2 col-start-2" friendList={friendList} user={user} />
-                <MessagePannel className="col-span-2 col-start-4" />
-            </div>
-        </>
-    )
+        <div className="w-screen h-screen grid grid-cols-[280px_1fr] bg-gray-100">
+            <FriendPanel
+                friendList={friendList}
+            // currentFriend={currentFriend}
+            // onSelectFriend={setCurrentFriend}
+            />
+
+            <MessagePanel
+                friend={currentFriend}
+                user={user}
+            />
+        </div>
+    );
 }
 
-export default FunctionalPage
+export default FunctionalPage;

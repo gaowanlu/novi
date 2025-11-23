@@ -3,13 +3,15 @@ import { APIMacro } from '../api/APIMacro';
 import { apiFetch } from '../api/request';
 import { useAuth } from '../context/AuthContext';
 
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+
 function LogoutPage() {
     const [loading, setLoading] = useState(false);
     const [msg, setMsg] = useState('');
-    const { token, user, logout } = useAuth();
+    const { user, logout } = useAuth();
 
-    const handleButtonClick = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const handleLogout = async () => {
         setLoading(true);
         setMsg('');
 
@@ -21,31 +23,52 @@ function LogoutPage() {
             const data = await res.json();
 
             if (res.ok) {
-                setMsg(`退出登录成功！${JSON.stringify(data)}`);
-                console.log('退出登录成功:', data);
+                setMsg('退出成功 ✔️');
                 logout();
             } else {
-                setMsg(data.message || '退出登录失败');
+                setMsg(data.message || '退出失败 ❌');
             }
         } catch (err) {
             setMsg('网络错误');
-            console.error(err);
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <>
-            <h1>LogoutPage</h1>
-            {loading && <p>登出中...</p>}
+        <div className="w-screen h-screen flex items-center justify-center bg-gray-50">
+            <Card className="w-full max-w-md shadow-lg border border-gray-200">
+                <CardHeader>
+                    <CardTitle className="text-xl font-semibold text-center">
+                        退出登录
+                    </CardTitle>
+                </CardHeader>
 
-            {token && <p>token: {token}</p>}
-            {user && <p>userId: {user.userId} userName: {user.userName} email: {user.email}</p>}
-            {msg && <p>{msg}</p>}
+                <CardContent className="space-y-4">
 
-            <button onClick={(e) => handleButtonClick(e)}>退出登录</button>
-        </>
+                    {user && (
+                        <div className="text-center text-gray-600 text-sm space-y-1">
+                            <p>当前用户：<span className="font-medium">{user.userName}</span></p>
+                            <p>Email：{user.email}</p>
+                        </div>
+                    )}
+
+                    {msg && (
+                        <p className="text-center text-sm text-blue-600">
+                            {msg}
+                        </p>
+                    )}
+
+                    <Button
+                        onClick={handleLogout}
+                        disabled={loading}
+                        className="w-full py-2 text-base"
+                    >
+                        {loading ? '退出中...' : '确认退出'}
+                    </Button>
+                </CardContent>
+            </Card>
+        </div>
     );
 }
 
