@@ -176,7 +176,7 @@ function NewFriendPage() {
             </div>
             <div>
                 <h2>申请管理</h2>
-                <div className='flex flex-col gap-2'>
+                <div className='flex flex-col gap-2 p-2'>
                     {friendRequestResultList.map((item: FriendRequestResult) => {
                         return <Item key={item.friendRequestId} variant="outline">
                             <p>发起者: {item.requester.userId} | {item.requester.userName}</p>
