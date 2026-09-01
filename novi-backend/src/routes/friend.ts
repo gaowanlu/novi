@@ -217,28 +217,28 @@ const putFriendRequestHandler: RequestHandler = async (
             }
         );
 
-        friendRequestById = await FriendRequest.findOne({ _id: friendRequestId }).
+        let friendRequestByIdUpdated = await FriendRequest.findOne({ _id: friendRequestId }).
             select('_id requester receiver status');
 
         // 好友申请状态更新后马上通知给自己和对方
-        if (friendRequestById) {
+        if (friendRequestByIdUpdated) {
             try {
-                const myOnlineNode = await redisClient.get(`user:online:${friendRequestById.receiver.toString()}`);
+                const myOnlineNode = await redisClient.get(`user:online:${friendRequestByIdUpdated.receiver.toString()}`);
                 if (myOnlineNode) {
                     noviNodeIPC.sendToNode(myOnlineNode,
-                        noviNodeIPC.createNewMessage(friendRequestById.receiver.toString(), 'novi_friend_request_processed', friendRequestById));
+                        noviNodeIPC.createNewMessage(friendRequestByIdUpdated.receiver.toString(), 'novi_friend_request_processed', friendRequestByIdUpdated));
                 }
-                const targetUserOnlineNode = await redisClient.get(`user:online:${friendRequestById.requester.toString()}`);
+                const targetUserOnlineNode = await redisClient.get(`user:online:${friendRequestByIdUpdated.requester.toString()}`);
                 if (targetUserOnlineNode) {
                     noviNodeIPC.sendToNode(targetUserOnlineNode,
-                        noviNodeIPC.createNewMessage(friendRequestById.requester.toString(), 'novi_friend_request_processed', friendRequestById));
+                        noviNodeIPC.createNewMessage(friendRequestByIdUpdated.requester.toString(), 'novi_friend_request_processed', friendRequestByIdUpdated));
                 }
             } catch (err: any) {
                 logger.error(`${err.message}`);
             }
         }
 
-        res.status(200).json(friendRequestById);
+        res.status(200).json(friendRequestByIdUpdated);
         return
     } catch (err: any) {
         logger.error(`${err.message}`);
