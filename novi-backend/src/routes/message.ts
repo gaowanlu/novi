@@ -17,7 +17,8 @@ const router = Router();
 const postFriendMessage = Joi.object({
     noviCode: Joi.string().trim().min(1).max(10).required(),
     receiver: Joi.string().trim().min(10).max(100).required(),
-    content: Joi.string().trim().min(1).max(200).required()
+    // 当前明文阶段上限 200；E2E 落地后 content 变为密文，上限需随之放大
+    content: Joi.string().trim().min(1).max(65535).required()
 });
 const postFriendMessagHandler: RequestHandler = async (req: IRequest, res: Response): Promise<void> => {
     const myUserId = req.noviUser?._id as string;
@@ -25,6 +26,7 @@ const postFriendMessagHandler: RequestHandler = async (req: IRequest, res: Respo
     const { noviCode, receiver, content } = req.body;
     if (receiver === myUserId) {
         res.status(400).json({ message: '无法向自己发送消息' });
+        return
     }
 
     try {
@@ -114,7 +116,11 @@ const getMessageAllFriendHandler: RequestHandler = async (req: IRequest, res: Re
                 }
             },
             {
-                $unwind: "$senderInfo"
+                $unwind: {
+                    path: "$senderInfo",
+                    // 发送者账号已被删除时保留该记录，避免未读汇总被静默丢弃
+                    preserveNullAndEmptyArrays: true
+                }
             },
             {
                 $project: {
@@ -125,7 +131,11 @@ const getMessageAllFriendHandler: RequestHandler = async (req: IRequest, res: Re
                     sentAt: "$latestMessage.sentAt",
                     lastMessageID: "$latestMessage._id",
                     noviCode: "$latestMessage.noviCode",
-                    senderInfo: { userName: 1, _id: 1 }
+                    // 发送者已注销时兜底显示
+                    senderInfo: {
+                        _id: { $ifNull: ["$senderInfo._id", null] },
+                        userName: { $ifNull: ["$senderInfo.userName", "对方账号已注销"] }
+                    }
                 }
             },
             {
@@ -153,16 +163,24 @@ const getMessagePullUnreadByFriendHandler: RequestHandler = async (req: IRequest
         const queryObj = req.query as { sender: string, before: string, after: string };
 
         const senderId = mongoose.Types.ObjectId.createFromHexString(queryObj.sender);
-        const receiverId = mongoose.Types.ObjectId.createFromHexString(myUserId);
+        const myObjectId = mongoose.Types.ObjectId.createFromHexString(myUserId);
+
+        // 会话是双向的：既要「对方发给我」，也要「我发给对方」。
+        // 参数名 sender 实际指「会话对端」，这里统一用 $or 覆盖两个方向。
+        const conversationFilter = {
+            $or: [
+                { sender: senderId, receiver: myObjectId },
+                { sender: myObjectId, receiver: senderId }
+            ]
+        };
 
         // 如果指定了before,则直接拉取历史消息
         if (queryObj.before) {
             const beforeTime = new Date(queryObj.before);
             const messages = await FriendMessage.find({
-                sender: senderId,
-                receiver: receiverId,
+                ...conversationFilter,
                 sentAt: { $lte: beforeTime }
-            }).sort({ sentAt: -1 }).limit(30).lean();
+            }).sort({ sentAt: -1, _id: -1 }).limit(30).lean();
 
             // 正序返回
             res.status(200).json(messages.reverse());
@@ -173,27 +191,25 @@ const getMessagePullUnreadByFriendHandler: RequestHandler = async (req: IRequest
         if (queryObj.after) {
             const afterTime = new Date(queryObj.after);
             const messages = await FriendMessage.find({
-                sender: senderId,
-                receiver: receiverId,
+                ...conversationFilter,
                 sentAt: { $gte: afterTime }
-            }).sort({ sentAt: 1 }).limit(30).lean();
+            }).sort({ sentAt: 1, _id: 1 }).limit(30).lean();
             res.status(200).json(messages);
             return
         }
 
-        // 找第一条未读消息
+        // 找第一条未读消息（未读只可能是对方发给我的）
         const firstUnread = await FriendMessage.findOne({
             sender: senderId,
-            receiver: receiverId,
+            receiver: myObjectId,
             readAt: null
         }).sort({ sentAt: 1 }).lean(); // 第一条未读
 
         // 没有未读消息，取最新10条消息
         if (!firstUnread) {
             const latest = await FriendMessage.find({
-                sender: senderId,
-                receiver: receiverId,
-            }).sort({ sentAt: -1 }).limit(10).lean();
+                ...conversationFilter,
+            }).sort({ sentAt: -1, _id: -1 }).limit(10).lean();
 
             res.status(200).json(latest);
             return
@@ -201,18 +217,16 @@ const getMessagePullUnreadByFriendHandler: RequestHandler = async (req: IRequest
 
         // 拉取 firstUnread之前的最多30条（用于上下文），注意先按倒序取 limit 再反转为正序
         const prevRaw = await FriendMessage.find({
-            sender: senderId,
-            receiver: receiverId,
+            ...conversationFilter,
             sentAt: { $lt: firstUnread.sentAt }
-        }).sort({ sentAt: -1 }).limit(30).lean();
+        }).sort({ sentAt: -1, _id: -1 }).limit(30).lean();
         const previous = prevRaw.reverse();
 
         // 拉取从firstUnread开始的最多30条，包含 firstUnread
         const afterUnread = await FriendMessage.find({
-            sender: senderId,
-            receiver: receiverId,
+            ...conversationFilter,
             sentAt: { $gte: firstUnread.sentAt }
-        }).sort({ sentAt: 1 }).limit(30).lean();
+        }).sort({ sentAt: 1, _id: 1 }).limit(30).lean();
 
         // 组合：前30升序+后30升序
         const all = [...previous, ...afterUnread];
@@ -258,31 +272,28 @@ const putMessageMarkreadedHandler = async (req: IRequest, res: Response): Promis
             return
         }
 
-        const idsToUpdate = unreadMessages.map(m => m._id);
-
-        // 执行批量更新
+        // 执行批量更新：过滤条件与上面的 find 完全一致，保证原子且无并发竞态
         const result = await FriendMessage.updateMany(
-            { _id: { $in: idsToUpdate } },
+            { _id: { $in: objectIds }, receiver: mongoose.Types.ObjectId.createFromHexString(myUserId), readAt: null },
             { $set: { readAt: new Date() } }
         );
 
         // 消息已读状态更新后马上通知给自己和对方
+        // 用 Promise.allSettled 显式并发推送，不阻塞响应；单条失败不影响其它
         if (unreadMessages.length !== 0) {
-            unreadMessages.forEach(async (itemMessage) => {
-                try {
-                    const senderOnlineNode = await redisClient.get(`user:online:${itemMessage.sender.toString()}`);
-                    if (senderOnlineNode) {
-                        noviNodeIPC.sendToNode(senderOnlineNode,
-                            noviNodeIPC.createNewMessage(itemMessage.sender.toString(), 'novi_friend_message_readed', itemMessage));
-                    }
-                    const receiverOnlineNode = await redisClient.get(`user:online:${itemMessage.receiver.toString()}`);
-                    if (receiverOnlineNode) {
-                        noviNodeIPC.sendToNode(receiverOnlineNode,
-                            noviNodeIPC.createNewMessage(itemMessage.receiver.toString(), 'novi_friend_message_readed', itemMessage));
-                    }
-                } catch (err: any) {
-                    logger.error(`${err.message}`);
+            void Promise.allSettled(unreadMessages.map(async (itemMessage) => {
+                const senderOnlineNode = await redisClient.get(`user:online:${itemMessage.sender.toString()}`);
+                if (senderOnlineNode) {
+                    noviNodeIPC.sendToNode(senderOnlineNode,
+                        noviNodeIPC.createNewMessage(itemMessage.sender.toString(), 'novi_friend_message_readed', itemMessage));
                 }
+                const receiverOnlineNode = await redisClient.get(`user:online:${itemMessage.receiver.toString()}`);
+                if (receiverOnlineNode) {
+                    noviNodeIPC.sendToNode(receiverOnlineNode,
+                        noviNodeIPC.createNewMessage(itemMessage.receiver.toString(), 'novi_friend_message_readed', itemMessage));
+                }
+            })).then(results => {
+                results.forEach(r => { if (r.status === 'rejected') logger.error(`markreaded 推送失败: ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`); });
             });
         }
 
@@ -329,31 +340,28 @@ const putMessageCryptoAckHandler = async (req: IRequest, res: Response): Promise
             return
         }
 
-        const idsToUpdate = unAckMessages.map(m => m._id);
-
-        // 执行批量更新
+        // 执行批量更新：过滤条件与上面的 find 完全一致，保证原子且无并发竞态
         const result = await FriendMessage.updateMany(
-            { _id: { $in: idsToUpdate } },
+            { _id: { $in: objectIds }, receiver: mongoose.Types.ObjectId.createFromHexString(myUserId), cryptoAckAt: null },
             { $set: { cryptoAckAt: new Date() } }
         );
 
-        // 消息已读状态更新后马上通知给自己和对方
+        // 消息解密确认状态更新后马上通知给自己和对方
+        // 用 Promise.allSettled 显式并发推送，不阻塞响应；单条失败不影响其它
         if (unAckMessages.length !== 0) {
-            unAckMessages.forEach(async (itemMessage) => {
-                try {
-                    const senderOnlineNode = await redisClient.get(`user:online:${itemMessage.sender.toString()}`);
-                    if (senderOnlineNode) {
-                        noviNodeIPC.sendToNode(senderOnlineNode,
-                            noviNodeIPC.createNewMessage(itemMessage.sender.toString(), 'novi_friend_message_crypto_ack', itemMessage));
-                    }
-                    const receiverOnlineNode = await redisClient.get(`user:online:${itemMessage.receiver.toString()}`);
-                    if (receiverOnlineNode) {
-                        noviNodeIPC.sendToNode(receiverOnlineNode,
-                            noviNodeIPC.createNewMessage(itemMessage.receiver.toString(), 'novi_friend_message_crypto_ack', itemMessage));
-                    }
-                } catch (err: any) {
-                    logger.error(`${err.message}`);
+            void Promise.allSettled(unAckMessages.map(async (itemMessage) => {
+                const senderOnlineNode = await redisClient.get(`user:online:${itemMessage.sender.toString()}`);
+                if (senderOnlineNode) {
+                    noviNodeIPC.sendToNode(senderOnlineNode,
+                        noviNodeIPC.createNewMessage(itemMessage.sender.toString(), 'novi_friend_message_crypto_ack', itemMessage));
                 }
+                const receiverOnlineNode = await redisClient.get(`user:online:${itemMessage.receiver.toString()}`);
+                if (receiverOnlineNode) {
+                    noviNodeIPC.sendToNode(receiverOnlineNode,
+                        noviNodeIPC.createNewMessage(itemMessage.receiver.toString(), 'novi_friend_message_crypto_ack', itemMessage));
+                }
+            })).then(results => {
+                results.forEach(r => { if (r.status === 'rejected') logger.error(`crypto/ack 推送失败: ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`); });
             });
         }
 

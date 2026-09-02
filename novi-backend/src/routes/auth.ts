@@ -8,12 +8,9 @@ import middlewareAuth from '../middlewares/middlewareAuth.js';
 import logger from '../logger.js';
 import crypto from 'crypto'
 import { redisClient } from "../db/dbRedis.js";
-import jwt from 'jsonwebtoken'
+import { signToken, JWT_TOKEN_TTL } from '../config/jwt.js';
 
 const router = Router();
-
-const JWT_SECRET = process.env.NOVI_JWT_SECRET ?? '';
-const JWT_TOKEN_TTL = Number.parseInt(process.env.NOVI_JWT_TOKEN_TTL ?? '3600', 10) || 3600;
 
 // POST login/
 const postLoginSchema = Joi.object({
@@ -40,7 +37,7 @@ const loginHandler: RequestHandler = async (req: IRequest, res: Response): Promi
         }
 
         const userId = String((userByEmail as any)._id)
-        const newToken = jwt.sign({ _id: userId }, JWT_SECRET)
+        const newToken = signToken(userId)
 
         // 保存 token 到 redis，带 TTL
         await redisClient.set(`user:auth:${userId}`, newToken, { EX: JWT_TOKEN_TTL })

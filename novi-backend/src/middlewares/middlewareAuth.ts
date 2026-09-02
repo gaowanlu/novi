@@ -1,11 +1,9 @@
-import jwt, { JwtPayload } from "jsonwebtoken";
 import { redisClient } from "../db/dbRedis.js";
+import { verifyToken } from '../config/jwt.js';
 import logger from "../logger.js";
 import type { NextFunction, Response } from 'express'
 import type { IRequest } from "../comm/request.js";
 import { NoviUser } from "../comm/noviUser.js";
-
-const JWT_SECRET = process.env.NOVI_JWT_SECRET as string;
 
 /**
  * 中间件：JWT 认证
@@ -30,7 +28,7 @@ async function middlewareAuth(req: IRequest, res: Response, next: NextFunction):
         }
         const token = tokenParts[1];
 
-        const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
+        const decoded = verifyToken(token);
 
         // 从Redis验证是否还有效
         const cacheToken = await redisClient.get(`user:auth:${decoded._id}`);

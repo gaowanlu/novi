@@ -1,7 +1,7 @@
 import { Server, Socket } from 'socket.io'
 import logger from '../logger.js';
 import { redisClient } from "../db/dbRedis.js";
-import jwt from 'jsonwebtoken';
+import { verifyToken } from '../config/jwt.js';
 import type { NoviUser } from '../comm/noviUser.js';
 
 // 扩展 Socket 接口，添加自定义属性
@@ -42,7 +42,7 @@ class UserConnections {
             const token = tokenRaw as string;
 
             try {
-                const decodedRaw = jwt.verify(token, process.env.NOVI_JWT_SECRET as string);
+                const decodedRaw = verifyToken(token);
                 if (!decodedRaw || typeof decodedRaw !== 'object') {
                     return next(new Error('认证信息不匹配'));
                 }

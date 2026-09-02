@@ -1,5 +1,5 @@
 import pkg from 'pg'
-import type { Pool, PoolClient, QueryResult } from 'pg'
+import type { Pool, QueryResult } from 'pg'
 import logger from '../logger.js';
 
 const { Pool: PgPool } = pkg;
@@ -22,12 +22,12 @@ const pgPool: Pool = new PgPool({
 });
 
 // 监听连接事件
-pgPool.on('connect', (client: PoolClient): void => {
+pgPool.on('connect', (): void => {
     logger.info('PostgreSQL 已连接');
 });
 
 // 监听错误事件
-pgPool.on('error', (err: Error, client: PoolClient): void => {
+pgPool.on('error', (err: Error): void => {
     logger.error('PostgreSQL 池错误：', err.message);
 });
 
@@ -55,11 +55,12 @@ CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
 };
 
 // 连接 PostgreSQL 数据库
-let connectPostgres = async (): Promise<void> => {
+// 仅做连接探测 + 建表，不手动借出 client（借出而不 release 会泄漏连接）
+const connectPostgres = async (): Promise<void> => {
     try {
-        const client: PoolClient = await pgPool.connect();
-        logger.info("Postgres connected");
+        await pgPool.query('SELECT 1');
         await updateDatabaseNovi();
+        logger.info("Postgres connected");
     } catch (err) {
         const errorMessage = err instanceof Error ? err.message : '未知错误'
         logger.error(`PostgreSQL 连接失败: ${errorMessage}`)

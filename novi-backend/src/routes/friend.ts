@@ -108,61 +108,73 @@ interface FriendRequestResponse {
         userName: string
     }
 }
+
+// 构建「与我相关的好友申请/好友」聚合流水线，供 GET /request 与 GET / 复用。
+// status 传入时（如 'accepted'）只返回该状态的记录；不传则返回全部历史。
+const buildFriendRequestPipeline = (myUserId: string, status?: string) => {
+    const matchStage: Record<string, any> = {
+        $or: [
+            { requester: mongoose.Types.ObjectId.createFromHexString(myUserId) },
+            { receiver: mongoose.Types.ObjectId.createFromHexString(myUserId) }
+        ]
+    };
+    if (status) {
+        matchStage.status = status;
+    }
+
+    return [
+        { $match: matchStage },
+        // 合并 requester 信息（对方账号已删时保留记录，避免被 $unwind 静默丢弃）
+        {
+            $lookup: {
+                from: 'users',
+                let: { requesterId: '$requester' },
+                pipeline: [
+                    { $match: { $expr: { $eq: ['$_id', '$$requesterId'] } } },
+                    { $project: { _id: 1, userName: 1 } } // 只取必要字段
+                ],
+                as: 'requester'
+            }
+        },
+        { $unwind: { path: '$requester', preserveNullAndEmptyArrays: true } },
+
+        // 合并 receiver 信息
+        {
+            $lookup: {
+                from: 'users',
+                let: { receiverId: '$receiver' },
+                pipeline: [
+                    { $match: { $expr: { $eq: ['$_id', '$$receiverId'] } } },
+                    { $project: { _id: 1, userName: 1 } }
+                ],
+                as: 'receiver'
+            }
+        },
+        { $unwind: { path: '$receiver', preserveNullAndEmptyArrays: true } },
+
+        // 最终输出
+        {
+            $project: {
+                _id: 0,
+                friendRequestId: '$_id',
+                status: 1,
+                createdAt: 1,
+                'requester.userId': '$requester._id',
+                'requester.userName': { $ifNull: ['$requester.userName', '对方账号已注销'] },
+                'receiver.userId': '$receiver._id',
+                'receiver.userName': { $ifNull: ['$receiver.userName', '对方账号已注销'] }
+            }
+        }
+    ];
+};
+
 const getFriendRequestHandler: RequestHandler = async (req: IRequest, res: Response): Promise<void> => {
     const myUserId = req.noviUser?._id as string;
 
     try {
-        const friendRequests = await FriendRequest.aggregate<FriendRequestResponse>([
-            {
-                $match: {
-                    $or: [
-                        { requester: mongoose.Types.ObjectId.createFromHexString(myUserId) },
-                        { receiver: mongoose.Types.ObjectId.createFromHexString(myUserId) }
-                    ]
-                }
-            },
-            // 合并 requester 信息
-            {
-                $lookup: {
-                    from: 'users',
-                    let: { requesterId: '$requester' },
-                    pipeline: [
-                        { $match: { $expr: { $eq: ['$_id', '$$requesterId'] } } },
-                        { $project: { _id: 1, userName: 1 } } // 只取必要字段
-                    ],
-                    as: 'requester'
-                }
-            },
-            { $unwind: '$requester' },
-
-            // 合并 receiver 信息
-            {
-                $lookup: {
-                    from: 'users',
-                    let: { receiverId: '$receiver' },
-                    pipeline: [
-                        { $match: { $expr: { $eq: ['$_id', '$$receiverId'] } } },
-                        { $project: { _id: 1, userName: 1 } }
-                    ],
-                    as: 'receiver'
-                }
-            },
-            { $unwind: '$receiver' },
-
-            // 最终输出
-            {
-                $project: {
-                    _id: 0,
-                    friendRequestId: '$_id',
-                    status: 1,
-                    createdAt: 1,
-                    'requester.userId': '$requester._id',
-                    'requester.userName': '$requester.userName',
-                    'receiver.userId': '$receiver._id',
-                    'receiver.userName': '$receiver.userName'
-                }
-            }
-        ]);
+        const friendRequests = await FriendRequest.aggregate<FriendRequestResponse>(
+            buildFriendRequestPipeline(myUserId)
+        );
 
         res.status(200).json(friendRequests);
         return
@@ -378,58 +390,9 @@ const getFriendListHandler: RequestHandler = async (
     const myUserId = req.noviUser?._id as string;
 
     try {
-        const friendRequests = await FriendRequest.aggregate<FriendRequestResponse>([
-            {
-                $match: {
-                    $or: [
-                        { requester: mongoose.Types.ObjectId.createFromHexString(myUserId) },
-                        { receiver: mongoose.Types.ObjectId.createFromHexString(myUserId) }
-                    ],
-                    status: 'accepted',
-                }
-            },
-            // 合并 requester 信息
-            {
-                $lookup: {
-                    from: 'users',
-                    let: { requesterId: '$requester' },
-                    pipeline: [
-                        { $match: { $expr: { $eq: ['$_id', '$$requesterId'] } } },
-                        { $project: { _id: 1, userName: 1 } } // 只取必要字段
-                    ],
-                    as: 'requester'
-                }
-            },
-            { $unwind: '$requester' },
-
-            // 合并 receiver 信息
-            {
-                $lookup: {
-                    from: 'users',
-                    let: { receiverId: '$receiver' },
-                    pipeline: [
-                        { $match: { $expr: { $eq: ['$_id', '$$receiverId'] } } },
-                        { $project: { _id: 1, userName: 1 } }
-                    ],
-                    as: 'receiver'
-                }
-            },
-            { $unwind: '$receiver' },
-
-            // 最终输出
-            {
-                $project: {
-                    _id: 0,
-                    friendRequestId: '$_id',
-                    status: 1,
-                    createdAt: 1,
-                    'requester.userId': '$requester._id',
-                    'requester.userName': '$requester.userName',
-                    'receiver.userId': '$receiver._id',
-                    'receiver.userName': '$receiver.userName'
-                }
-            }
-        ]);
+        const friendRequests = await FriendRequest.aggregate<FriendRequestResponse>(
+            buildFriendRequestPipeline(myUserId, 'accepted')
+        );
 
         res.status(200).json(friendRequests);
         return

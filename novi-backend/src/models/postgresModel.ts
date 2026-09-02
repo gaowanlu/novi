@@ -31,7 +31,7 @@ async function createOrder(user_id: number, amount: number): Promise<Order> {
 async function selectOrderByUserId(user_id: number): Promise<Order[]> {
     try {
         const result: QueryResult<Order> = await pgPool.query(
-            'SELECT* from orders where user_id=$1',
+            'SELECT id, user_id, amount, created_at FROM orders WHERE user_id = $1',
             [user_id]
         );
         return result.rows;
