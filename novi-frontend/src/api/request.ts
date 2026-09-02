@@ -20,3 +20,20 @@ export const apiFetch = async (url: string, options: RequestInit = {}) => {
 
     return res;
 };
+
+// 统一解析后端 JSON 响应（成功/错误体均为 JSON）
+export const parseJson = async (res: Response) => {
+    try {
+        return await res.json();
+    } catch {
+        return null;
+    }
+};
+
+// 后端错误提示文案（无 message 时按状态码兜底）
+export const errorText = (res: Response, data: { message?: string } | null): string => {
+    if (data?.message) return data.message;
+    if (res.status === 400) return '请求参数不符合要求';
+    if (res.status === 404) return '请求的资源不存在';
+    return `请求失败（${res.status}）`;
+};

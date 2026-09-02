@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { APIMacro } from '@/api/APIMacro';
 import { apiFetch } from '@/api/request';
-import { useAuth } from '@/context/AuthContext';
+import { useSessionUser } from '@/context/AuthContext';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,8 +16,19 @@ import { ButtonGroup } from "@/components/ui/button-group";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { motion } from "framer-motion";
-import { Search, UserPlus, Users } from "lucide-react";
+import { Search, UserPlus, Users, Clock } from "lucide-react";
 import { toast } from "sonner";
+
+const STATUS_LABEL: Record<string, string> = {
+    pending: '待处理',
+    accepted: '已是好友',
+    rejected: '已拒绝',
+    deleted: '已删除',
+    canceled: '已撤销',
+};
+
+const formatDateTime = (iso?: string | null) =>
+    iso ? new Date(iso).toLocaleString("zh-CN") : "—";
 
 interface SearchUserResult {
     userName: string;
@@ -39,7 +50,8 @@ interface FriendRequestResult {
 }
 
 export default function NewFriendPage() {
-    const { user } = useAuth();
+    const user = useSessionUser();
+    const [loadingRequests, setLoadingRequests] = useState(true);
     const [searching, setSearching] = useState(false);
     const [searchUserId, setSearchUserId] = useState('');
     const [searchUserName, setSearchUserName] = useState('');
@@ -89,21 +101,33 @@ export default function NewFriendPage() {
     };
 
     const handleGetFriendRequest = async () => {
+        setLoadingRequests(true);
         try {
             const res = await apiFetch(APIMacro.GETFRIENDREQUEST, { method: 'GET' });
             const data = await res.json();
             if (res.ok) {
-                setFriendRequestResultList(data.reverse());
+                // 待处理（别人等我回复 / 我发出未回复）置顶，其余按时间倒序
+                const list = [...data].reverse();
+                const pending = (s: string) => s === 'pending';
+                list.sort((a, b) => {
+                    const pa = pending(a.status) ? 0 : 1;
+                    const pb = pending(b.status) ? 0 : 1;
+                    return pa - pb;
+                });
+                setFriendRequestResultList(list);
             }
         } catch (err: any) {
             console.log(err);
+        } finally {
+            setLoadingRequests(false);
         }
     };
 
     const handleDeleteFriend = async (targetUserId: string, friendRequestId: string) => {
         try {
+            const params = new URLSearchParams({ targetUserId, friendRequestId });
             const res = await apiFetch(
-                `${APIMacro.DELETEFRIEND}?targetUserId=${targetUserId}&&friendRequestId=${friendRequestId}`,
+                `${APIMacro.DELETEFRIEND}?${params.toString()}`,
                 { method: 'DELETE' }
             );
             const data = await res.json();
@@ -239,13 +263,31 @@ export default function NewFriendPage() {
                     </CardHeader>
 
                     <CardContent className="space-y-4">
+                        {loadingRequests && friendRequestResultList.length === 0 && (
+                            <p className="text-sm text-gray-500 text-center py-4">加载申请记录…</p>
+                        )}
+
+                        {!loadingRequests && friendRequestResultList.length === 0 && (
+                            <p className="text-sm text-gray-500 text-center py-4">暂无好友申请记录</p>
+                        )}
+
                         {friendRequestResultList.map((item) => (
                             <Item key={item.friendRequestId} variant="outline" className="p-4 rounded-xl flex-col items-start">
                                 <div className="flex flex-col gap-1 text-sm text-gray-700">
-                                    <p><strong>发起者：</strong>{item.requester.userId} · {item.requester.userName}</p>
-                                    <p><strong>接收者：</strong>{item.receiver.userId} · {item.receiver.userName}</p>
-                                    <p><strong>状态：</strong>{item.status}</p>
-                                    <p><strong>创建时间：</strong>{item.createdAt}</p>
+                                    <p className="flex items-center gap-1">
+                                        <strong>
+                                            {user.userId === item.receiver.userId ? '有人申请加你' : '你申请添加'}
+                                        </strong>
+                                        <span className="font-semibold">{user.userId === item.receiver.userId ? item.requester.userName : item.receiver.userName}</span>
+                                    </p>
+                                    <p><strong>状态：</strong>{STATUS_LABEL[item.status] ?? item.status}</p>
+                                    <p className="flex items-center gap-1 text-xs text-gray-500">
+                                        <Clock className="w-3 h-3" />
+                                        {formatDateTime(item.createdAt)}
+                                        {item.status === 'pending' && user.userId === item.receiver.userId
+                                            ? ' · 等待你回复'
+                                            : item.status === 'pending' ? ' · 等待对方回复' : ''}
+                                    </p>
                                 </div>
 
                                 <ButtonGroup className="flex w-full justify-end pt-3">

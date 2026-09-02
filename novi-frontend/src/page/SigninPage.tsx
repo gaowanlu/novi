@@ -35,9 +35,8 @@ function SigninPage() {
             const data = await res.json();
 
             if (res.ok) {
-                console.log('成功:', data);
                 login(data.jwtToken, { userId: data.userId, userName: data.userName, email: data.email });
-                navigate("/");
+                navigate("/functional");
             } else {
                 console.error('登录失败', data.message);
                 toast.error("Login failed", {
@@ -100,8 +99,7 @@ function SigninPage() {
                                 <Button
                                     type="submit"
                                     className='w-full'
-                                    disabled={loginProcessing}
-                                    onClick={handleSubmit}>
+                                    disabled={loginProcessing}>
                                     {loginProcessing ? 'Processing...' : 'Login'}
                                 </Button>
                             </div>

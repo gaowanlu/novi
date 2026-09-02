@@ -1,26 +1,28 @@
 import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 
 interface UserInfo {
-  userId: string;
+  userId: string | null;
   userName: string;
 }
 
 interface FriendItem {
+  friendRequestId: string;
   requester: UserInfo;
   receiver: UserInfo;
   status: string;
   createdAt: string;
-  friendRequestId: string;
 }
 
 interface FriendPanelProps {
   friendList?: FriendItem[];
-  user?: any;
+  user?: { userId: string } | null;
   currentFriendId?: string;
-  onSelectFriend?: (friend: UserInfo) => void;
+  onSelectFriend?: (friend: { userId: string; userName: string }) => void;
+  /** 每个好友的未读消息数，key 为好友 userId */
+  unreadCounts?: Record<string, number>;
   className?: string;
 }
 
@@ -29,6 +31,7 @@ export default function FriendPanel({
   user,
   currentFriendId,
   onSelectFriend,
+  unreadCounts = {},
   className
 }: FriendPanelProps) {
   const myUserId = user?.userId ?? '';
@@ -39,35 +42,43 @@ export default function FriendPanel({
 
       <ScrollArea className="h-[calc(100%-3.5rem)]">
         <div className="space-y-2 p-2">
-          {friendList.length === 0 && <p className="text-gray-500 text-sm">暂无好友</p>}
+          {friendList.length === 0 && (
+            <p className="text-gray-500 text-sm px-2 py-4 text-center">
+              暂无好友，去「新朋友」页面添加吧
+            </p>
+          )}
 
           {friendList.map(item => {
             const friend = myUserId === item.receiver.userId ? item.requester : item.receiver;
             const isActive = currentFriendId === friend.userId;
+            const unread = friend.userId ? (unreadCounts[friend.userId] ?? 0) : 0;
 
             return (
               <div
                 key={item.friendRequestId}
-                onClick={() => onSelectFriend?.(friend)}
+                onClick={() => friend.userId && onSelectFriend?.({ userId: friend.userId, userName: friend.userName })}
                 className={`
                   flex items-center justify-between p-3 rounded-xl cursor-pointer
                   transition-colors
                   ${isActive ? "bg-gray-200" : "hover:bg-gray-100"}
                 `}
               >
-                <div className="flex items-center gap-3">
-                  <Avatar className="w-10 h-10">
-                    <AvatarImage src={`https://avatars.dicebear.com/api/identicon/${friend.userId}.svg`} />
-                    <AvatarFallback>{friend.userName[0]}</AvatarFallback>
+                <div className="flex items-center gap-3 min-w-0">
+                  <Avatar className="w-10 h-10 shrink-0">
+                    <AvatarFallback>{friend.userName?.[0] ?? '?'}</AvatarFallback>
                   </Avatar>
-                  <div>
-                    <p className="font-semibold text-gray-900">{friend.userName}</p>
-                    <p className="text-xs text-gray-500">ID: {friend.userId}</p>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-gray-900 truncate">{friend.userName}</p>
+                    <p className="text-xs text-gray-500 truncate">ID: {friend.userId}</p>
                   </div>
                 </div>
-                <Badge className="bg-gray-100 text-gray-700 text-xs">
-                  {item.status === 'accepted' ? '好友' : item.status}
-                </Badge>
+                {unread > 0 ? (
+                  <Badge className="bg-red-500 text-white hover:bg-red-500 text-xs shrink-0">
+                    {unread > 99 ? '99+' : unread}
+                  </Badge>
+                ) : (
+                  <Badge className="bg-gray-100 text-gray-700 text-xs shrink-0">好友</Badge>
+                )}
               </div>
             );
           })}

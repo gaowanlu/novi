@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { APIMacro } from '../api/APIMacro';
 import { apiFetch } from '../api/request';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, useSessionUser } from '../context/AuthContext';
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,8 @@ function UserInfoPage() {
     const [email, setEmail] = useState('');
     const [msg, setMsg] = useState('');
 
-    const { user, updateEmailAndUserName } = useAuth();
+    const { updateEmailAndUserName } = useAuth();
+    const user = useSessionUser();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
