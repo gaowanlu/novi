@@ -1,8 +1,10 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth, useSessionUser } from "@/context/AuthContext";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { toast } from "sonner";
+import { LogOut } from "lucide-react";
+
+import { PageShell } from "@/components/PageShell";
+import { Button } from "@/components/ui/button";
 
 // 保留 /logout 路由以兼容旧链接：直接执行退出并回到登录页
 export default function LogoutPage() {
@@ -15,18 +17,24 @@ export default function LogoutPage() {
     toast.success("已退出登录");
 
     return (
-        <div className="w-screen h-screen flex items-center justify-center bg-gray-50">
-            <Card className="w-full max-w-sm">
-                <CardHeader>
-                    <CardTitle className="text-center">已退出登录</CardTitle>
-                    <CardDescription className="text-center">
-                        {user.userName} 已安全登出
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="flex justify-center">
+        <PageShell>
+            <div className="flex flex-col items-center gap-4 text-center">
+                <div className="flex size-14 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                    <LogOut className="size-6" data-icon="inline-start" />
+                </div>
+                <div className="flex flex-col gap-1">
+                    <h1 className="text-lg font-semibold tracking-tight">已退出登录</h1>
+                    <p className="text-sm text-muted-foreground">
+                        {user.userName} 已安全登出，会话已结束。
+                    </p>
+                </div>
+                <div className="flex w-full items-center justify-center gap-3 pt-2">
+                    <Button asChild variant="ghost">
+                        <Link to="/">返回首页</Link>
+                    </Button>
                     <Button onClick={() => navigate("/signin")}>前往登录</Button>
-                </CardContent>
-            </Card>
-        </div>
+                </div>
+            </div>
+        </PageShell>
     );
 }

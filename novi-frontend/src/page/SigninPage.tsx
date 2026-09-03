@@ -1,34 +1,32 @@
-import { toast } from "sonner"
-
 import { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { toast } from 'sonner';
+import { Loader2 } from 'lucide-react';
+
 import { APIMacro } from '../api/APIMacro';
 import { apiFetch } from '../api/request';
 import { useAuth } from '../context/AuthContext';
+import { PageShell } from '@/components/PageShell';
 import { Button } from '@/components/ui/button';
-import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { useNavigate } from "react-router-dom";
-import { Link } from "react-router-dom";
-
+import { Separator } from '@/components/ui/separator';
 
 function SigninPage() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [loginProcessing, setLoginProcessing] = useState(false);
+    const [processing, setProcessing] = useState(false);
     const { login } = useAuth();
     const navigate = useNavigate();
 
-    const handleSubmit = async (e: any) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoginProcessing(true);
+        setProcessing(true);
 
         try {
             const res = await apiFetch(APIMacro.LOGIN, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password }),
             });
 
@@ -36,80 +34,85 @@ function SigninPage() {
 
             if (res.ok) {
                 login(data.jwtToken, { userId: data.userId, userName: data.userName, email: data.email });
-                navigate("/functional");
+                navigate('/functional');
             } else {
-                console.error('登录失败', data.message);
-                toast.error("Login failed", {
-                    description: (
-                        <span className="text-red-400">
-                            {data.message}
-                        </span>
-                    ),
-                    action: {
-                        label: "Undo",
-                        onClick: () => console.log("Undo"),
-                    },
-                });
+                toast.error('登录失败', { description: data.message });
             }
-        } catch (err) {
-            console.error(err);
+        } catch (err: any) {
+            toast.error('网络错误', { description: err?.message });
         } finally {
-            setLoginProcessing(false);
+            setProcessing(false);
         }
     };
 
     return (
-        <div className='w-full h-screen flex justify-center items-center'>
-            <Card className='w-full max-w-sm'>
-                <CardHeader>
-                    <CardTitle>Login to your novi account</CardTitle>
-                    <CardDescription>
-                        Each friendship, a unique encryption pair the platform can never see.
-                    </CardDescription>
-                    <CardAction>
-                        <Link to="/signup"><Button variant="link">sign up?</Button></Link>
-                    </CardAction>
-                </CardHeader>
-                <CardContent>
-                    <form onSubmit={handleSubmit}>
-                        <div className='flex flex-col gap-6'>
-                            <div className='grid gap-2'>
-                                <Label htmlFor='email'>Email</Label>
-                                <Input id='email'
-                                    type='email'
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    placeholder='account@mfavant.xyz'
-                                    required />
-                            </div>
-                            <div className='grid gap-2'>
-                                <div className='flex items-center'>
-                                    <Label htmlFor='password'>Password</Label>
-                                    <a href='#' className='ml-auto inline-block text-sm underline-offset-4 hover:underline'>
-                                        Forgot your password?
-                                    </a>
-                                </div>
-                                <Input id="password"
-                                    type="password"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    required />
-                            </div>
-                            <div className='grid gap-2'>
-                                <Button
-                                    type="submit"
-                                    className='w-full'
-                                    disabled={loginProcessing}>
-                                    {loginProcessing ? 'Processing...' : 'Login'}
-                                </Button>
-                            </div>
+        <PageShell>
+            <div className="flex flex-col gap-6">
+                <div className="flex flex-col gap-1">
+                    <h1 className="text-lg font-semibold tracking-tight">登录</h1>
+                    <p className="text-sm text-muted-foreground">
+                        欢迎回来，你的消息始终处于加密状态。
+                    </p>
+                </div>
+
+                <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-2">
+                        <Label htmlFor="email">邮箱</Label>
+                        <Input
+                            id="email"
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            placeholder="account@example.com"
+                            autoComplete="email"
+                            required
+                        />
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                        <div className="flex items-center justify-between">
+                            <Label htmlFor="password">密码</Label>
+                            <a
+                                href="#"
+                                className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                                onClick={e => e.preventDefault()}
+                            >
+                                忘记密码？
+                            </a>
                         </div>
-                    </form>
-                </CardContent>
-                <CardFooter className="flex-col gap-2">
-                </CardFooter>
-            </Card>
-        </div>
+                        <Input
+                            id="password"
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            autoComplete="current-password"
+                            required
+                        />
+                    </div>
+
+                    <Button
+                        type="submit"
+                        className="mt-1 w-full"
+                        disabled={processing}
+                    >
+                        {processing && <Loader2 data-icon="inline-start" className="animate-spin" />}
+                        {processing ? '登录中…' : '登录'}
+                    </Button>
+                </form>
+
+                <Separator className="mx-0" />
+
+                <p className="text-center text-sm text-muted-foreground">
+                    还没有账号？{' '}
+                    <Link
+                        to="/signup"
+                        className="font-medium text-foreground underline-offset-4 hover:underline"
+                    >
+                        立即注册
+                    </Link>
+                </p>
+            </div>
+        </PageShell>
     );
 }
 

@@ -1,23 +1,34 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { toast } from 'sonner';
+import {
+    Search,
+    UserPlus,
+    Users,
+    Clock,
+    Check,
+    X,
+    Trash2,
+    CornerDownLeft,
+    ArrowLeft,
+    Loader2
+} from 'lucide-react';
+
 import { APIMacro } from '@/api/APIMacro';
 import { apiFetch } from '@/api/request';
 import { useSessionUser } from '@/context/AuthContext';
+import type { FriendRequestItem } from '@/api/types';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-    Item,
-    ItemActions,
-    ItemContent,
-    ItemDescription,
-    ItemTitle
-} from "@/components/ui/item";
-import { ButtonGroup } from "@/components/ui/button-group";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import { motion } from "framer-motion";
-import { Search, UserPlus, Users, Clock } from "lucide-react";
-import { toast } from "sonner";
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Item, ItemActions, ItemContent, ItemDescription, ItemTitle } from '@/components/ui/item';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Empty, EmptyMedia, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
 
 const STATUS_LABEL: Record<string, string> = {
     pending: '待处理',
@@ -28,40 +39,30 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const formatDateTime = (iso?: string | null) =>
-    iso ? new Date(iso).toLocaleString("zh-CN") : "—";
+    iso ? new Date(iso).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
 
 interface SearchUserResult {
     userName: string;
     _id: string;
 }
 
-interface FriendRequestResult {
-    friendRequestId: string;
-    createdAt: string;
-    status: string;
-    requester: {
-        userId: string;
-        userName: string;
-    };
-    receiver: {
-        userId: string;
-        userName: string;
-    };
-}
-
 export default function NewFriendPage() {
     const user = useSessionUser();
-    const [loadingRequests, setLoadingRequests] = useState(true);
-    const [searching, setSearching] = useState(false);
+
     const [searchUserId, setSearchUserId] = useState('');
     const [searchUserName, setSearchUserName] = useState('');
-    const [msg, setMsg] = useState('');
-    const [searchUserResultList, setSearchUserResultList] = useState<SearchUserResult[]>([]);
-    const [friendRequestResultList, setFriendRequestResultList] = useState<FriendRequestResult[]>([]);
+    const [searching, setSearching] = useState(false);
+    const [searchResults, setSearchResults] = useState<SearchUserResult[]>([]);
+    const [searched, setSearched] = useState(false);
 
-    const handleSearchUserSubmit = async (e: React.FormEvent) => {
+    const [requests, setRequests] = useState<FriendRequestItem[]>([]);
+    const [loadingRequests, setLoadingRequests] = useState(true);
+
+    // 搜索
+    const handleSearch = async (e: React.FormEvent) => {
         e.preventDefault();
         setSearching(true);
+        setSearched(true);
         try {
             const res = await apiFetch(APIMacro.USERFIND, {
                 method: 'POST',
@@ -69,19 +70,16 @@ export default function NewFriendPage() {
                 body: JSON.stringify({ _id: searchUserId, userName: searchUserName })
             });
             const data = await res.json();
-            if (res.ok) {
-                setSearchUserResultList(data);
-            } else {
-                setMsg(data.message);
-            }
-        } catch (err: any) {
-            console.error(err);
+            if (res.ok) setSearchResults(data);
+            else setSearchResults([]);
+        } catch {
+            setSearchResults([]);
         } finally {
             setSearching(false);
         }
     };
 
-    const handleAddNewFriendRequest = async (_id: string) => {
+    const handleAddFriend = async (_id: string) => {
         try {
             const res = await apiFetch(APIMacro.POSTFRIENDREQUEST, {
                 method: 'POST',
@@ -90,75 +88,38 @@ export default function NewFriendPage() {
             });
             const data = await res.json();
             if (res.ok) {
-                toast.success("申请成功");
-                handleGetFriendRequest();
+                toast.success('申请已发送');
+                refreshRequests();
             } else {
                 toast.error(data.message);
             }
         } catch (err: any) {
-            console.log(err);
+            toast.error(err?.message || '发送失败');
         }
     };
 
-    const handleGetFriendRequest = async () => {
+    // 申请记录
+    const refreshRequests = async () => {
         setLoadingRequests(true);
         try {
             const res = await apiFetch(APIMacro.GETFRIENDREQUEST, { method: 'GET' });
             const data = await res.json();
             if (res.ok) {
-                // 待处理（别人等我回复 / 我发出未回复）置顶，其余按时间倒序
-                const list = [...data].reverse();
-                const pending = (s: string) => s === 'pending';
+                const list: FriendRequestItem[] = [...data].reverse();
                 list.sort((a, b) => {
-                    const pa = pending(a.status) ? 0 : 1;
-                    const pb = pending(b.status) ? 0 : 1;
+                    const pa = a.status === 'pending' ? 0 : 1;
+                    const pb = b.status === 'pending' ? 0 : 1;
                     return pa - pb;
                 });
-                setFriendRequestResultList(list);
+                setRequests(list);
             }
-        } catch (err: any) {
-            console.log(err);
-        } finally {
+        } catch { /* 静默 */ }
+        finally {
             setLoadingRequests(false);
         }
     };
 
-    const handleDeleteFriend = async (targetUserId: string, friendRequestId: string) => {
-        try {
-            const params = new URLSearchParams({ targetUserId, friendRequestId });
-            const res = await apiFetch(
-                `${APIMacro.DELETEFRIEND}?${params.toString()}`,
-                { method: 'DELETE' }
-            );
-            const data = await res.json();
-            if (res.ok) {
-                handleGetFriendRequest();
-            } else {
-                toast.error(data.message);
-            }
-        } catch (err: any) {
-            console.error(err);
-        }
-    };
-
-    const handleDeleteFriendRequest = async (friendRequestId: string) => {
-        try {
-            const res = await apiFetch(
-                `${APIMacro.DELETEFRIENDREQUEST}?friendRequestId=${friendRequestId}`,
-                { method: 'DELETE' }
-            );
-            const data = await res.json();
-            if (res.ok) {
-                handleGetFriendRequest();
-            } else {
-                toast.error(data.message);
-            }
-        } catch (err: any) {
-            console.error(err);
-        }
-    };
-
-    const handlePutFriendRequest = async (friendRequestId: string, status: string) => {
+    const handleRespond = async (friendRequestId: string, status: 'accepted' | 'rejected') => {
         try {
             const res = await apiFetch(APIMacro.PUTFRIENDREQUEST, {
                 method: 'PUT',
@@ -166,176 +127,296 @@ export default function NewFriendPage() {
                 body: JSON.stringify({ friendRequestId, status })
             });
             const data = await res.json();
-            if (res.ok) {
-                handleGetFriendRequest();
-            } else {
-                toast.error(data.message);
-            }
+            if (res.ok) refreshRequests();
+            else toast.error(data.message);
         } catch (err: any) {
-            console.error(err);
+            toast.error(err?.message);
+        }
+    };
+
+    const handleCancel = async (friendRequestId: string) => {
+        try {
+            const res = await apiFetch(
+                `${APIMacro.DELETEFRIENDREQUEST}?friendRequestId=${friendRequestId}`,
+                { method: 'DELETE' }
+            );
+            const data = await res.json();
+            if (res.ok) refreshRequests();
+            else toast.error(data.message);
+        } catch (err: any) {
+            toast.error(err?.message);
+        }
+    };
+
+    const handleDeleteFriend = async (targetUserId: string, friendRequestId: string) => {
+        if (!confirm('确定删除该好友关系吗？')) return;
+        try {
+            const params = new URLSearchParams({ targetUserId, friendRequestId });
+            const res = await apiFetch(`${APIMacro.DELETEFRIEND}?${params.toString()}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (res.ok) refreshRequests();
+            else toast.error(data.message);
+        } catch (err: any) {
+            toast.error(err?.message);
         }
     };
 
     useEffect(() => {
-        handleGetFriendRequest();
+        refreshRequests();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    const pendingIncoming = useMemo(
+        () => requests.filter(r => r.status === 'pending' && user.userId === r.receiver.userId).length,
+        [requests, user.userId]
+    );
+
     return (
-        <div className="min-h-screen p-6 bg-linear-to-b from-white to-gray-100 flex items-center justify-center">
-            <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="w-full max-w-4xl space-y-8"
-            >
-
-                {/* 顶部标题 */}
-                <div className="text-center space-y-2">
-                    <h1 className="text-4xl font-extrabold tracking-tight text-gray-900 flex items-center justify-center gap-2">
-                        <UserPlus className="w-8 h-8 text-gray-700" />
-                        新朋友
-                    </h1>
-                    <p className="text-gray-500">查找用户 · 发送好友请求 · 管理你的关系</p>
+        <div className="flex min-h-dvh flex-col bg-muted/30">
+            {/* 顶部栏 */}
+            <header className="sticky top-0 z-10 flex items-center gap-3 border-b bg-background px-4 py-3 md:px-6">
+                <Button variant="ghost" size="icon" asChild aria-label="返回聊天">
+                    <Link to="/functional"><ArrowLeft /></Link></Button>
+                <div className="flex flex-col leading-tight">
+                    <h1 className="text-base font-semibold tracking-tight">新朋友</h1>
+                    <p className="text-xs text-muted-foreground">查找用户 · 管理好友关系</p>
                 </div>
+            </header>
 
-                {/* 搜索区域 */}
-                <Card className="rounded-2xl">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-xl">
-                            <Search className="w-5 h-5" />
+            <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-6">
+                <Tabs defaultValue="search" className="flex flex-col gap-4">
+                    <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="search" className="gap-2">
+                            <Search data-icon="inline-start" className="size-4" />
                             搜索用户
-                        </CardTitle>
-                        <p>{msg}</p>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <form onSubmit={handleSearchUserSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <Input
-                                placeholder="用户ID"
-                                value={searchUserId}
-                                onChange={(e) => setSearchUserId(e.target.value)}
-                            />
-                            <Input
-                                placeholder="用户名"
-                                value={searchUserName}
-                                onChange={(e) => setSearchUserName(e.target.value)}
-                            />
-                            <Button type="submit" className="w-full">
-                                {searching ? "搜索中..." : "搜索"}
+                        </TabsTrigger>
+                        <TabsTrigger value="requests" className="gap-2">
+                            <Users data-icon="inline-start" className="size-4" />
+                            申请管理
+                            {pendingIncoming > 0 && (
+                                <Badge
+                                    variant="secondary"
+                                    className="ml-1 h-4.5 min-w-4.5 gap-0 rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground"
+                                >
+                                    {pendingIncoming}
+                                </Badge>
+                            )}
+                        </TabsTrigger>
+                    </TabsList>
+
+                    {/* 搜索用户 */}
+                    <TabsContent value="search" className="mt-2 flex flex-col gap-4">
+                        <form onSubmit={handleSearch} className="flex flex-col gap-4">
+                            <div className="grid gap-3 sm:grid-cols-2">
+                                <div className="flex flex-col gap-1.5">
+                                    <Label htmlFor="searchId">用户 ID</Label>
+                                    <Input
+                                        id="searchId"
+                                        placeholder="输入用户 ID"
+                                        value={searchUserId}
+                                        onChange={e => setSearchUserId(e.target.value)}
+                                    />
+                                </div>
+                                <div className="flex flex-col gap-1.5">
+                                    <Label htmlFor="searchName">用户名</Label>
+                                    <Input
+                                        id="searchName"
+                                        placeholder="输入用户名"
+                                        value={searchUserName}
+                                        onChange={e => setSearchUserName(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                            <Button type="submit" className="w-fit" disabled={searching}>
+                                {searching
+                                    ? <Loader2 data-icon="inline-start" className="animate-spin" />
+                                    : <Search data-icon="inline-start" />}
+                                {searching ? '搜索中…' : '搜索'}
                             </Button>
                         </form>
 
                         <Separator />
 
-                        <div className="flex flex-col gap-4">
-                            {searchUserResultList.length === 0 && (
-                                <p className="text-sm text-gray-500 text-center">暂无搜索结果</p>
-                            )}
-
-                            {searchUserResultList.map((item) => (
-                                <Item key={item._id} variant="outline" className="p-4 rounded-xl">
-                                    <ItemContent>
-                                        <ItemTitle className="font-semibold text-gray-900">{item.userName}</ItemTitle>
-                                        <ItemDescription className="text-gray-500">
-                                            {item._id}
-                                        </ItemDescription>
-                                    </ItemContent>
-                                    <ItemActions>
-                                        <Button
-                                            onClick={() => handleAddNewFriendRequest(item._id)}
-                                            size="sm"
-                                            className="bg-gray-900 text-white hover:bg-black"
-                                        >
-                                            添加好友
-                                        </Button>
-                                    </ItemActions>
-                                </Item>
-                            ))}
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* 好友请求区域 */}
-                <Card className="rounded-2xl">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-xl">
-                            <Users className="w-5 h-5" />
-                            申请管理
-                        </CardTitle>
-                    </CardHeader>
-
-                    <CardContent className="space-y-4">
-                        {loadingRequests && friendRequestResultList.length === 0 && (
-                            <p className="text-sm text-gray-500 text-center py-4">加载申请记录…</p>
-                        )}
-
-                        {!loadingRequests && friendRequestResultList.length === 0 && (
-                            <p className="text-sm text-gray-500 text-center py-4">暂无好友申请记录</p>
-                        )}
-
-                        {friendRequestResultList.map((item) => (
-                            <Item key={item.friendRequestId} variant="outline" className="p-4 rounded-xl flex-col items-start">
-                                <div className="flex flex-col gap-1 text-sm text-gray-700">
-                                    <p className="flex items-center gap-1">
-                                        <strong>
-                                            {user.userId === item.receiver.userId ? '有人申请加你' : '你申请添加'}
-                                        </strong>
-                                        <span className="font-semibold">{user.userId === item.receiver.userId ? item.requester.userName : item.receiver.userName}</span>
-                                    </p>
-                                    <p><strong>状态：</strong>{STATUS_LABEL[item.status] ?? item.status}</p>
-                                    <p className="flex items-center gap-1 text-xs text-gray-500">
-                                        <Clock className="w-3 h-3" />
-                                        {formatDateTime(item.createdAt)}
-                                        {item.status === 'pending' && user.userId === item.receiver.userId
-                                            ? ' · 等待你回复'
-                                            : item.status === 'pending' ? ' · 等待对方回复' : ''}
-                                    </p>
-                                </div>
-
-                                <ButtonGroup className="flex w-full justify-end pt-3">
-                                    {user.userId === item.receiver.userId && item.status === "pending" && (
-                                        <>
+                        {searching ? (
+                            <div className="flex flex-col gap-2">
+                                {[...Array(2)].map((_, i) => (
+                                    <Item key={i} variant="outline">
+                                        <Skeleton className="size-10 rounded-full" />
+                                        <div className="flex-1 space-y-1.5">
+                                            <Skeleton className="h-4 w-32" />
+                                            <Skeleton className="h-3 w-48" />
+                                        </div>
+                                    </Item>
+                                ))}
+                            </div>
+                        ) : !searched ? (
+                            <Empty className="py-10">
+                                <EmptyMedia className="mt-0">
+                                    <Search className="size-6" />
+                                </EmptyMedia>
+                                <EmptyTitle>查找新用户</EmptyTitle>
+                                <EmptyDescription>
+                                    输入用户 ID 或用户名，找到他们并发送好友请求。
+                                </EmptyDescription>
+                            </Empty>
+                        ) : searchResults.length === 0 ? (
+                            <Empty className="py-10">
+                                <EmptyTitle>没有找到用户</EmptyTitle>
+                                <EmptyDescription>
+                                    换个 ID 或用户名试试，或确认对方已注册。
+                                </EmptyDescription>
+                            </Empty>
+                        ) : (
+                            <div className="flex flex-col gap-2">
+                                {searchResults.map(item => (
+                                    <Item key={item._id} variant="outline">
+                                        <Avatar className="size-10 shrink-0">
+                                            <AvatarFallback className="bg-secondary text-sm font-medium text-secondary-foreground">
+                                                {item.userName?.trim()?.slice(0, 2) || '?'}
+                                            </AvatarFallback>
+                                        </Avatar>
+                                        <ItemContent className="min-w-0">
+                                            <ItemTitle className="truncate">{item.userName}</ItemTitle>
+                                            <ItemDescription className="truncate font-mono text-xs">
+                                                {item._id}
+                                            </ItemDescription>
+                                        </ItemContent>
+                                        <ItemActions>
                                             <Button
-                                                variant="outline"
-                                                onClick={() => handlePutFriendRequest(item.friendRequestId, 'accepted')}
+                                                size="sm"
+                                                onClick={() => handleAddFriend(item._id)}
+                                                className="gap-1.5"
                                             >
-                                                同意
+                                                <UserPlus data-icon="inline-start" className="size-4" />
+                                                添加好友
                                             </Button>
+                                        </ItemActions>
+                                    </Item>
+                                ))}
+                            </div>
+                        )}
+                    </TabsContent>
 
-                                            <Button
-                                                variant="outline"
-                                                onClick={() => handlePutFriendRequest(item.friendRequestId, 'rejected')}
-                                            >
-                                                拒绝
-                                            </Button>
-                                        </>
-                                    )}
+                    {/* 申请管理 */}
+                    <TabsContent value="requests" className="mt-2 flex flex-col gap-2">
+                        {loadingRequests && requests.length === 0 ? (
+                            <div className="flex flex-col gap-2">
+                                {[...Array(3)].map((_, i) => (
+                                    <Item key={i} variant="outline">
+                                        <Skeleton className="size-10 rounded-full" />
+                                        <div className="flex-1 space-y-1.5">
+                                            <Skeleton className="h-4 w-40" />
+                                            <Skeleton className="h-3 w-52" />
+                                        </div>
+                                    </Item>
+                                ))}
+                            </div>
+                        ) : requests.length === 0 ? (
+                            <Empty className="py-10">
+                                <EmptyMedia className="mt-0">
+                                    <Users className="size-6" />
+                                </EmptyMedia>
+                                <EmptyTitle>暂无申请记录</EmptyTitle>
+                                <EmptyDescription>
+                                    你发出的和收到的好友请求都会显示在这里。
+                                </EmptyDescription>
+                            </Empty>
+                        ) : (
+                            requests.map(item => {
+                                const isReceiver = user.userId === item.receiver.userId;
+                                const other = isReceiver ? item.requester : item.receiver;
+                                const pending = item.status === 'pending';
 
-                                    {user.userId === item.requester.userId && item.status === "pending" && (
-                                        <Button variant="outline" onClick={() => handleDeleteFriendRequest(item.friendRequestId)}>
-                                            撤销
-                                        </Button>
-                                    )}
+                                return (
+                                    <Item key={item.friendRequestId} variant="outline" className="flex-col items-stretch gap-3 py-3">
+                                        <div className="flex items-center gap-3">
+                                            <Avatar className="size-10 shrink-0">
+                                                <AvatarFallback className="bg-secondary text-sm font-medium text-secondary-foreground">
+                                                    {other.userName?.trim()?.slice(0, 2) || '?'}
+                                                </AvatarFallback>
+                                            </Avatar>
+                                            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="truncate text-sm font-medium">{other.userName}</span>
+                                                    <Badge
+                                                        variant={
+                                                            item.status === 'accepted' ? 'secondary'
+                                                            : 'outline'
+                                                        }
+                                                        className="shrink-0 rounded-full px-2 py-0 text-[10px] font-normal"
+                                                    >
+                                                        {STATUS_LABEL[item.status] ?? item.status}
+                                                    </Badge>
+                                                </div>
+                                                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                                    <Clock data-icon="inline-start" className="size-3" />
+                                                    {formatDateTime(item.createdAt)}
+                                                    {isReceiver
+                                                        ? ' · 对方申请加你'
+                                                        : ' · 你发出的申请'}
+                                                </span>
+                                            </div>
+                                        </div>
 
-                                    {item.status === 'accepted' && (
-                                        <Button
-                                            variant="outline"
-                                            onClick={() =>
-                                                handleDeleteFriend(
-                                                    user.userId === item.receiver.userId ? item.requester.userId : item.receiver.userId,
-                                                    item.friendRequestId
-                                                )
-                                            }
-                                        >
-                                            删除好友关系
-                                        </Button>
-                                    )}
-                                </ButtonGroup>
+                                        {(pending || item.status === 'accepted') && (
+                                            <>
+                                                <Separator />
+                                                <div className="flex items-center justify-end gap-2">
+                                                    {isReceiver && pending && (
+                                                        <>
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                onClick={() => handleRespond(item.friendRequestId, 'rejected')}
+                                                                className="gap-1.5"
+                                                            >
+                                                                <X data-icon="inline-start" className="size-4" />
+                                                                拒绝
+                                                            </Button>
+                                                            <Button
+                                                                size="sm"
+                                                                onClick={() => handleRespond(item.friendRequestId, 'accepted')}
+                                                                className="gap-1.5"
+                                                            >
+                                                                <Check data-icon="inline-start" className="size-4" />
+                                                                同意
+                                                            </Button>
+                                                        </>
+                                                    )}
 
-                            </Item>
-                        ))}
-                    </CardContent>
-                </Card>
+                                                    {!isReceiver && pending && (
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => handleCancel(item.friendRequestId)}
+                                                            className="gap-1.5"
+                                                        >
+                                                            <CornerDownLeft data-icon="inline-start" className="size-4" />
+                                                            撤销申请
+                                                        </Button>
+                                                    )}
 
-            </motion.div>
+                                                    {item.status === 'accepted' && (
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => handleDeleteFriend(other.userId!, item.friendRequestId)}
+                                                            className="gap-1.5 text-destructive hover:text-destructive"
+                                                        >
+                                                            <Trash2 data-icon="inline-start" className="size-4" />
+                                                            删除好友
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            </>
+                                        )}
+                                    </Item>
+                                );
+                            })
+                        )}
+                    </TabsContent>
+                </Tabs>
+            </main>
         </div>
     );
 }
