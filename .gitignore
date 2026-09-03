@@ -1,0 +1,10 @@
+.agents/
+.claude/
+skills-lock.json
+
+# 本地演示 mock 服务的依赖
+mock/node_modules/
+
+# 前端本地环境（VITE_NOVI_HOST 等），不入库
+novi-frontend/.env
+novi-frontend/.env.local

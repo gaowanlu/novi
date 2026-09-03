@@ -1,0 +1,15 @@
+{
+    "name": "novi-mock",
+    "private": true,
+    "version": "0.0.0",
+    "type": "module",
+    "description": "Standalone mock of the novi backend HTTP API for frontend-only demo/development. No DB, no WebSocket.",
+    "scripts": {
+        "start": "node server.mjs",
+        "dev": "node --watch server.mjs"
+    },
+    "dependencies": {
+        "cors": "^2.8.5",
+        "express": "^4.19.2"
+    }
+}
