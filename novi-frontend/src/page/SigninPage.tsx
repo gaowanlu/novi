@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 
@@ -18,6 +18,9 @@ function SigninPage() {
     const [processing, setProcessing] = useState(false);
     const { login } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
+    // 被路由守卫拦截时的原目标地址，登录成功后回跳
+    const from = (location.state as { from?: string } | null)?.from;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -34,7 +37,7 @@ function SigninPage() {
 
             if (res.ok) {
                 login(data.jwtToken, { userId: data.userId, userName: data.userName, email: data.email });
-                navigate('/functional');
+                navigate(from || '/functional');
             } else {
                 toast.error('登录失败', { description: data.message });
             }
