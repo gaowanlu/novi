@@ -170,7 +170,8 @@ export default function MessagePanel({
             );
             const data = await parseJson(res);
             if (!res.ok) throw new Error(errorText(res, data));
-            const older = (data as FriendMessageItem[]) ?? [];
+            // 后端 before 分支返回倒序（新→旧），翻转为正序（旧→新）再拼到列表头部
+            const older = ((data as FriendMessageItem[]) ?? []).reverse();
             if (older.length > 0) {
                 const prevHeight = el.scrollHeight;
                 const prevTop = el.scrollTop;
@@ -265,8 +266,15 @@ export default function MessagePanel({
 
     // 按日期分组
     const groups = useMemo(() => {
+        // 防御性排序：不信任传输顺序，统一按 sentAt 升序（旧在上、新在下）。
+        // 同秒消息用 _id 兜底（Mongo ObjectId 天然含时间戳，可稳定去重排序）。
+        const sorted = [...messages].sort((a, b) => {
+            const d = new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime();
+            return d !== 0 ? d : a._id < b._id ? -1 : a._id > b._id ? 1 : 0;
+        });
+
         const out: { day: string; items: FriendMessageItem[] }[] = [];
-        for (const m of messages) {
+        for (const m of sorted) {
             const day = formatDay(m.sentAt);
             const last = out[out.length - 1];
             if (last && last.day === day) last.items.push(m);
