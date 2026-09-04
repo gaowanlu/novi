@@ -1,5 +1,7 @@
 # novi
 
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
 **End-to-end encrypted chat. Each friendship, a unique encryption pair the platform can never see.**
 
 novi is a friend-based chat application built around a single invariant: **the server stores only ciphertext and never holds the keys.** Cryptographic key material lives entirely on the client.
@@ -84,4 +86,4 @@ Neither project has a test runner configured.
 
 ## License
 
-[Add your license here]
+This project is licensed under the **Apache License, Version 2.0** — see the [LICENSE](LICENSE) file for details.
