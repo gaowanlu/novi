@@ -2,13 +2,13 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-**End-to-end encrypted chat. Each friendship, a unique encryption pair the platform can never see.**
+**Your encrypted identity belongs to no company.**
 
-novi is a friend-based chat application built around a single invariant: **the server stores only ciphertext and never holds the keys.** Cryptographic key material lives entirely on the client.
+novi is a friend-based chat application built around a single invariant: **the server stores only ciphertext and never holds the keys.** Your per-friendship encryption pairs live entirely on your device — not on a platform's servers, not in a platform's database, portable to any device you own.
 
 ## How it works
 
-- **Per-friendship key pairs.** Every friendship gets its own RSA key pair (identified by a `novicode` relationship version). Messages are RSA-encrypted and SHA256-signed by the sender; the receiver confirms successful decryption via a crypto-ack.
+- **Your identity, portable.** Every friendship gets its own RSA key pair (identified by a `novicode` relationship version) that lives **only on your device**. Messages are RSA-encrypted and SHA256-signed by the sender; the receiver confirms successful decryption via a crypto-ack. When a platform shuts down or bans you, your encryption pairs — and the encrypted history they protect — move with you, because no platform ever held them.
 - **Stateless clients.** Clients keep no chat history — only the per-friend key 5-tuples `{friendId, novicode, ownPrivateKey, ownPublicKey, friendPublicKey}`.
 - **Multi-node backend.** The API scales horizontally: a user's live socket connection is pinned to one node, and cross-node delivery is coordinated through Redis (presence) and RabbitMQ (node-to-node IPC). Socket.IO is used strictly for lightweight event *notifications* — message payloads always come back over HTTP.
 
