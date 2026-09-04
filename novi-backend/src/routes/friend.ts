@@ -7,8 +7,7 @@ import middlewareValidate from '../middlewares/middlewareValidate.js';
 import middlewareAuth from '../middlewares/middlewareAuth.js';
 import logger from '../logger.js';
 import mongoose from 'mongoose';
-import { noviNodeIPC } from '../mq/noviNodeIPC.js';
-import { redisClient } from "../db/dbRedis.js";
+import { pushToUsers, logPushError } from '../comm/push.js';
 
 const router = Router();
 
@@ -62,18 +61,13 @@ const postFriendRequestHandler: RequestHandler = async (
         // 新增记录成功了则将好友申请同时推给自己和对方
         if (saveNewFriendRequest) {
             try {
-                const myOnlineNode = await redisClient.get(`user:online:${myUserId}`);
-                if (myOnlineNode) {
-                    noviNodeIPC.sendToNode(myOnlineNode,
-                        noviNodeIPC.createNewMessage(myUserId as string, 'novi_friend_request_comming', saveNewFriendRequest));
-                }
-                const targetUserOnlineNode = await redisClient.get(`user:online:${targetUserId}`);
-                if (targetUserOnlineNode) {
-                    noviNodeIPC.sendToNode(targetUserOnlineNode,
-                        noviNodeIPC.createNewMessage(targetUserId, 'novi_friend_request_comming', saveNewFriendRequest));
-                }
-            } catch (err: any) {
-                logger.error(`${err.message}`);
+                await pushToUsers(
+                    [myUserId as string, targetUserId],
+                    'novi_friend_request_comming',
+                    saveNewFriendRequest
+                );
+            } catch (err) {
+                logPushError('novi_friend_request_comming', err);
             }
         }
 
@@ -235,18 +229,13 @@ const putFriendRequestHandler: RequestHandler = async (
         // 好友申请状态更新后马上通知给自己和对方
         if (friendRequestByIdUpdated) {
             try {
-                const myOnlineNode = await redisClient.get(`user:online:${friendRequestByIdUpdated.receiver.toString()}`);
-                if (myOnlineNode) {
-                    noviNodeIPC.sendToNode(myOnlineNode,
-                        noviNodeIPC.createNewMessage(friendRequestByIdUpdated.receiver.toString(), 'novi_friend_request_processed', friendRequestByIdUpdated));
-                }
-                const targetUserOnlineNode = await redisClient.get(`user:online:${friendRequestByIdUpdated.requester.toString()}`);
-                if (targetUserOnlineNode) {
-                    noviNodeIPC.sendToNode(targetUserOnlineNode,
-                        noviNodeIPC.createNewMessage(friendRequestByIdUpdated.requester.toString(), 'novi_friend_request_processed', friendRequestByIdUpdated));
-                }
-            } catch (err: any) {
-                logger.error(`${err.message}`);
+                await pushToUsers(
+                    [friendRequestByIdUpdated.receiver.toString(), friendRequestByIdUpdated.requester.toString()],
+                    'novi_friend_request_processed',
+                    friendRequestByIdUpdated
+                );
+            } catch (err) {
+                logPushError('novi_friend_request_processed', err);
             }
         }
 
@@ -305,18 +294,13 @@ const deleteFriendHandler: RequestHandler = async (
         // 好友删除后更新后马上通知给自己和对方
         if (deletedFriendRequest) {
             try {
-                const requesterOnlineNode = await redisClient.get(`user:online:${deletedFriendRequest.requester.toString()}`);
-                if (requesterOnlineNode) {
-                    noviNodeIPC.sendToNode(requesterOnlineNode,
-                        noviNodeIPC.createNewMessage(deletedFriendRequest.requester.toString(), 'novi_friend_friend_deleted', deletedFriendRequest));
-                }
-                const receiverOnlineNode = await redisClient.get(`user:online:${deletedFriendRequest.receiver.toString()}`);
-                if (receiverOnlineNode) {
-                    noviNodeIPC.sendToNode(receiverOnlineNode,
-                        noviNodeIPC.createNewMessage(deletedFriendRequest.receiver.toString(), 'novi_friend_friend_deleted', deletedFriendRequest));
-                }
-            } catch (err: any) {
-                logger.error(`${err.message}`);
+                await pushToUsers(
+                    [deletedFriendRequest.requester.toString(), deletedFriendRequest.receiver.toString()],
+                    'novi_friend_friend_deleted',
+                    deletedFriendRequest
+                );
+            } catch (err) {
+                logPushError('novi_friend_friend_deleted', err);
             }
         }
 
@@ -367,6 +351,19 @@ const deleteFriendRequestHandler: RequestHandler = async (
         }
 
         const deletedFriendRequest = await FriendRequest.findOne({ _id: targetFriendRequest._id });
+
+        // 撤回申请后马上通知给自己和对方，双方列表保持同步
+        if (deletedFriendRequest) {
+            try {
+                await pushToUsers(
+                    [deletedFriendRequest.requester.toString(), deletedFriendRequest.receiver.toString()],
+                    'novi_friend_request_comming',
+                    deletedFriendRequest
+                );
+            } catch (err) {
+                logPushError('novi_friend_request_comming', err);
+            }
+        }
 
         res.status(200).json(deletedFriendRequest);
         return

@@ -63,10 +63,13 @@ const ReadTicks = ({ read, sending }: { read: boolean; sending: boolean }) => {
 
 export default function MessagePanel({
     friend,
-    user
+    user,
+    registerPanel
 }: {
     friend: UserInfo | null;
     user?: { userId: string } | null;
+    /** 由 FunctionalPage 注入：WS 推送时向当前会话追加新消息 / 标记已读 */
+    registerPanel?: (append: (m: FriendMessageItem) => void, markReaded: (ids: string[]) => void) => void;
 }) {
     const myUserId = user?.userId ?? "";
 
@@ -131,6 +134,62 @@ export default function MessagePanel({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [friend?.userId]);
 
+    // 已读提交（1秒去抖批量提交）
+    const flushMarkRead = useCallback(async () => {
+        if (flushTimer.current) window.clearTimeout(flushTimer.current);
+        flushTimer.current = window.setTimeout(async () => {
+            const ids = [...pendingMarkRead.current];
+            pendingMarkRead.current = [];
+            if (ids.length === 0) return;
+            try {
+                const res = await apiFetch(APIMacro.PUTMESSAGE_MARKREADED, {
+                    method: "PUT",
+                    body: JSON.stringify({ messageIds: ids })
+                });
+                const data = await parseJson(res);
+                if (!res.ok) throw new Error(errorText(res, data));
+                setMessages(prev => prev.map(m =>
+                    ids.includes(m._id) ? { ...m, readAt: m.readAt ?? new Date().toISOString() } : m));
+            } catch (err: any) {
+                console.error("markreaded failed:", err);
+            }
+        }, 1000);
+    }, []);
+
+    const markRead = useCallback((ids: string[]) => {
+        pendingMarkRead.current.push(...ids);
+        flushMarkRead();
+    }, [flushMarkRead]);
+
+    // 向父级注册「追加新消息 / 标记已读」回调，供 WS 推送实时更新打开的会话
+    useEffect(() => {
+        if (!registerPanel) return;
+        if (!friend) {
+            registerPanel(() => { }, () => { });
+            return;
+        }
+        registerPanel(
+            (m: FriendMessageItem) => {
+                // 幂等追加：按 _id 去重，杜绝重复 key；
+                // 忽略 temp- 占位——自己的消息由 sendMessage 的 HTTP 响应统一替换为正式 _id
+                if (!m._id || m._id.startsWith("temp-")) return;
+                setMessages(prev => {
+                    if (prev.some(x => x._id === m._id)) return prev;
+                    return [...prev, m];
+                });
+            },
+            (ids: string[]) => {
+                if (ids.length === 0) return;
+                // 本地立即显示已读，同时经去抖通道提交服务器；
+                // 服务器更新后会推送 readed 回执给发送方，对方的双勾才能亮起
+                setMessages(prev => prev.map(x =>
+                    ids.includes(x._id) ? { ...x, readAt: x.readAt ?? new Date().toISOString() } : x));
+                markRead(ids);
+            }
+        );
+        return () => registerPanel(null as any, null as any);
+    }, [friend?.userId, registerPanel, markRead]);
+
     const scrollToBottom = useCallback((smooth = false) => {
         const el = viewportRef.current;
         if (el) el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" });
@@ -190,33 +249,6 @@ export default function MessagePanel({
             setLoadingOlder(false);
         }
     }, [friend, loadingOlder, hasMore, loading, messages, newCount]);
-
-    // 标记已读（1秒去抖批量提交）
-    const flushMarkRead = useCallback(async () => {
-        if (flushTimer.current) window.clearTimeout(flushTimer.current);
-        flushTimer.current = window.setTimeout(async () => {
-            const ids = [...pendingMarkRead.current];
-            pendingMarkRead.current = [];
-            if (ids.length === 0) return;
-            try {
-                const res = await apiFetch(APIMacro.PUTMESSAGE_MARKREADED, {
-                    method: "PUT",
-                    body: JSON.stringify({ messageIds: ids })
-                });
-                const data = await parseJson(res);
-                if (!res.ok) throw new Error(errorText(res, data));
-                setMessages(prev => prev.map(m =>
-                    ids.includes(m._id) ? { ...m, readAt: m.readAt ?? new Date().toISOString() } : m));
-            } catch (err: any) {
-                console.error("markreaded failed:", err);
-            }
-        }, 1000);
-    }, []);
-
-    const markRead = useCallback((ids: string[]) => {
-        pendingMarkRead.current.push(...ids);
-        flushMarkRead();
-    }, [flushMarkRead]);
 
     const sendMessage = async () => {
         const text = input.trim();

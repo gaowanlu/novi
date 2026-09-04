@@ -18,6 +18,7 @@ import { APIMacro } from '@/api/APIMacro';
 import { apiFetch } from '@/api/request';
 import { useSessionUser } from '@/context/AuthContext';
 import type { FriendRequestItem } from '@/api/types';
+import { useNoviSocketEvent } from '@/ws/noviSocket';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -165,6 +166,11 @@ export default function NewFriendPage() {
         refreshRequests();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // 实时刷新申请列表：好友申请到来 / 被处理 / 撤回 / 好友被删除 时立即更新
+    useNoviSocketEvent("novi_friend_request_comming", () => refreshRequests());
+    useNoviSocketEvent("novi_friend_request_processed", () => refreshRequests());
+    useNoviSocketEvent("novi_friend_friend_deleted", () => refreshRequests());
 
     const pendingIncoming = useMemo(
         () => requests.filter(r => r.status === 'pending' && user.userId === r.receiver.userId).length,

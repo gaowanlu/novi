@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { MessageCircle, Plus, Info, LogOut, Home as HomeIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -8,16 +8,14 @@ import { Button } from "@/components/ui/button";
 import { apiFetch, parseJson, errorText } from "@/api/request";
 import { APIMacro } from "@/api/APIMacro";
 import { useAuth } from "@/context/AuthContext";
-import type { FriendRequestItem, UnreadSummary } from "@/api/types";
+import type { FriendMessageItem, FriendRequestItem, UnreadSummary } from "@/api/types";
 import { toast } from "sonner";
+import { useNoviSocketEvent } from "@/ws/noviSocket";
 
 interface SelectedFriend {
     userId: string;
     userName: string;
 }
-
-// 无 WebSocket 阶段：轮询未读汇总，新消息到达时刷新徽章（打开的会话内部自己拉取）
-const UNREAD_POLL_MS = 15000;
 
 /** 桌面端左侧窄导航栏：品牌 + 页面入口 + 用户操作 */
 function NavRail() {
@@ -58,6 +56,15 @@ function FunctionalPage() {
 
     const { user } = useAuth();
     const myUserId = user?.userId ?? "";
+
+    // MessagePanel 注册的回调：WS 推送时据此实时更新打开的会话
+    const appendMessageRef = useRef<((m: FriendMessageItem) => void) | null>(null);
+    const markReadedRef = useRef<((ids: string[]) => void) | null>(null);
+    // 已追加到打开会话的消息ID，防止同一条消息被重复推送（发送者/接收者两端都会收到）
+    const seenMessageIdsRef = useRef<Set<string>>(new Set());
+    // 当前会话ID（ref 版，供 WS 回调读取最新值，避免闭包过期）
+    const currentFriendIdRef = useRef<string | null>(null);
+    currentFriendIdRef.current = currentFriend?.userId ?? null;
 
     const refreshFriendList = useCallback(async () => {
         setFriendLoading(true);
@@ -109,15 +116,59 @@ function FunctionalPage() {
     useEffect(() => {
         refreshFriendList();
         refreshUnread();
-        const timer = window.setInterval(refreshUnread, UNREAD_POLL_MS);
-        return () => window.clearInterval(timer);
+        return () => { appendMessageRef.current = null; markReadedRef.current = null; };
     }, [refreshFriendList, refreshUnread]);
+
+    // 收到新消息：更新好友列表排序/摘要/未读徽章；若属于当前打开的会话则直接追加气泡
+    useNoviSocketEvent("novi_friend_message_comming", (payload) => {
+        const m = payload as FriendMessageItem;
+        if (!m?._id) return;
+
+        // 刷新好友列表（新好友关系/排序）与未读徽章
+        refreshFriendList();
+        refreshUnread();
+
+        // 属于当前打开的会话 → 追加到气泡列表（去重：自己发出时本地乐观更新已加过）
+        const peerId = m.sender === myUserId ? m.receiver : m.sender;
+        if (peerId === currentFriendIdRef.current && !seenMessageIdsRef.current.has(m._id)) {
+            seenMessageIdsRef.current.add(m._id);
+            appendMessageRef.current?.(m);
+        }
+        // 对方发来的新消息进入已打开会话：立即标记已读，回执会推送回发送方
+        if (m.sender !== myUserId && peerId === currentFriendIdRef.current && !m.readAt) {
+            markReadedRef.current?.([m._id]);
+        }
+    });
+
+    // 消息被标为已读：更新打开会话中对应气泡的已读状态（双勾）
+    useNoviSocketEvent("novi_friend_message_readed", (payload) => {
+        const list: any[] = Array.isArray(payload) ? payload : [payload];
+        const ids: string[] = list.map((p: any) => p?._id).filter(Boolean);
+        if (ids.length === 0) return;
+        markReadedRef.current?.(ids);
+    });
+
+    // 消息解密确认：E2E 落地后用于同步确认状态，当前仅刷新好友列表
+    useNoviSocketEvent("novi_friend_message_crypto_ack", () => {
+        refreshFriendList();
+    });
 
     const handleSelectFriend = (friend: SelectedFriend) => {
         setCurrentFriend(friend);
         // 进入会话后由 MessagePanel 拉取并标记已读，随后刷新徽章
         refreshUnread();
     };
+
+    // 供 MessagePanel 注册的回调：向当前会话追加新消息 / 标记已读
+    const registerMessagePanel = useCallback((
+        append: ((m: FriendMessageItem) => void) | null,
+        markReaded: ((ids: string[]) => void) | null
+    ) => {
+        appendMessageRef.current = append;
+        markReadedRef.current = markReaded;
+        // 切换会话时重置去重集合
+        seenMessageIdsRef.current = new Set();
+    }, []);
 
     return (
         <div className="flex h-dvh w-full overflow-hidden bg-background">
@@ -142,7 +193,7 @@ function FunctionalPage() {
 
             {/* 聊天区 */}
             <div className={cn("min-w-0 flex-1", currentFriend ? "block" : "hidden md:block")}>
-                <MessagePanel friend={currentFriend} user={user} />
+                <MessagePanel friend={currentFriend} user={user} registerPanel={registerMessagePanel} />
             </div>
         </div>
     );

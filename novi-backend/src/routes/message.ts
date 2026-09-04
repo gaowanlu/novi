@@ -7,8 +7,7 @@ import middlewareValidate from '../middlewares/middlewareValidate.js';
 import middlewareAuth from '../middlewares/middlewareAuth.js';
 import logger from '../logger.js';
 import mongoose from 'mongoose';
-import { noviNodeIPC } from '../mq/noviNodeIPC.js';
-import { redisClient } from "../db/dbRedis.js";
+import { pushToUsers, logPushError } from '../comm/push.js';
 
 const router = Router();
 
@@ -58,18 +57,13 @@ const postFriendMessagHandler: RequestHandler = async (req: IRequest, res: Respo
         // 消息发送后马上通知给自己和对方
         if (saveNewFriendMessage) {
             try {
-                const senderOnlineNode = await redisClient.get(`user:online:${saveNewFriendMessage.sender.toString()}`);
-                if (senderOnlineNode) {
-                    noviNodeIPC.sendToNode(senderOnlineNode,
-                        noviNodeIPC.createNewMessage(saveNewFriendMessage.sender.toString(), 'novi_friend_message_comming', saveNewFriendMessage));
-                }
-                const receiverOnlineNode = await redisClient.get(`user:online:${saveNewFriendMessage.receiver.toString()}`);
-                if (receiverOnlineNode) {
-                    noviNodeIPC.sendToNode(receiverOnlineNode,
-                        noviNodeIPC.createNewMessage(saveNewFriendMessage.receiver.toString(), 'novi_friend_message_comming', saveNewFriendMessage));
-                }
-            } catch (err: any) {
-                logger.error(`${err.message}`);
+                await pushToUsers(
+                    [saveNewFriendMessage.sender.toString(), saveNewFriendMessage.receiver.toString()],
+                    'novi_friend_message_comming',
+                    saveNewFriendMessage
+                );
+            } catch (err) {
+                logPushError('novi_friend_message_comming', err);
             }
         }
 
@@ -278,23 +272,13 @@ const putMessageMarkreadedHandler = async (req: IRequest, res: Response): Promis
             { $set: { readAt: new Date() } }
         );
 
-        // 消息已读状态更新后马上通知给自己和对方
-        // 用 Promise.allSettled 显式并发推送，不阻塞响应；单条失败不影响其它
+        // 消息已读状态更新后马上通知给自己和对方（fire-and-forget，不阻塞响应）
         if (unreadMessages.length !== 0) {
-            void Promise.allSettled(unreadMessages.map(async (itemMessage) => {
-                const senderOnlineNode = await redisClient.get(`user:online:${itemMessage.sender.toString()}`);
-                if (senderOnlineNode) {
-                    noviNodeIPC.sendToNode(senderOnlineNode,
-                        noviNodeIPC.createNewMessage(itemMessage.sender.toString(), 'novi_friend_message_readed', itemMessage));
-                }
-                const receiverOnlineNode = await redisClient.get(`user:online:${itemMessage.receiver.toString()}`);
-                if (receiverOnlineNode) {
-                    noviNodeIPC.sendToNode(receiverOnlineNode,
-                        noviNodeIPC.createNewMessage(itemMessage.receiver.toString(), 'novi_friend_message_readed', itemMessage));
-                }
-            })).then(results => {
-                results.forEach(r => { if (r.status === 'rejected') logger.error(`markreaded 推送失败: ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`); });
-            });
+            void pushToUsers(
+                unreadMessages.flatMap(m => [m.sender.toString(), m.receiver.toString()]),
+                'novi_friend_message_readed',
+                unreadMessages
+            ).catch((err) => logPushError('novi_friend_message_readed', err));
         }
 
         res.status(200).json({
@@ -346,23 +330,13 @@ const putMessageCryptoAckHandler = async (req: IRequest, res: Response): Promise
             { $set: { cryptoAckAt: new Date() } }
         );
 
-        // 消息解密确认状态更新后马上通知给自己和对方
-        // 用 Promise.allSettled 显式并发推送，不阻塞响应；单条失败不影响其它
+        // 消息解密确认状态更新后马上通知给自己和对方（fire-and-forget，不阻塞响应）
         if (unAckMessages.length !== 0) {
-            void Promise.allSettled(unAckMessages.map(async (itemMessage) => {
-                const senderOnlineNode = await redisClient.get(`user:online:${itemMessage.sender.toString()}`);
-                if (senderOnlineNode) {
-                    noviNodeIPC.sendToNode(senderOnlineNode,
-                        noviNodeIPC.createNewMessage(itemMessage.sender.toString(), 'novi_friend_message_crypto_ack', itemMessage));
-                }
-                const receiverOnlineNode = await redisClient.get(`user:online:${itemMessage.receiver.toString()}`);
-                if (receiverOnlineNode) {
-                    noviNodeIPC.sendToNode(receiverOnlineNode,
-                        noviNodeIPC.createNewMessage(itemMessage.receiver.toString(), 'novi_friend_message_crypto_ack', itemMessage));
-                }
-            })).then(results => {
-                results.forEach(r => { if (r.status === 'rejected') logger.error(`crypto/ack 推送失败: ${r.reason instanceof Error ? r.reason.message : String(r.reason)}`); });
-            });
+            void pushToUsers(
+                unAckMessages.flatMap(m => [m.sender.toString(), m.receiver.toString()]),
+                'novi_friend_message_crypto_ack',
+                unAckMessages
+            ).catch((err) => logPushError('novi_friend_message_crypto_ack', err));
         }
 
         res.status(200).json({
