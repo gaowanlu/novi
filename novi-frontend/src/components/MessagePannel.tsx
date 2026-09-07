@@ -6,14 +6,9 @@ import {
     CheckCheck,
     Clock3,
     Lock,
-    MoreVertical,
-    Paperclip,
-    Search,
     SendHorizontal,
     ShieldAlert,
-    ShieldCheck,
-    Smile,
-    UserPlus
+    ShieldCheck
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -680,14 +675,6 @@ export default function MessagePanel({
                         )}
                     </span>
                 </div>
-                <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="icon" aria-label="搜索消息">
-                        <Search />
-                    </Button>
-                    <Button variant="ghost" size="icon" aria-label="更多">
-                        <MoreVertical />
-                    </Button>
-                </div>
             </header>
 
             {/* 密钥未就绪提示 */}
@@ -809,15 +796,9 @@ export default function MessagePanel({
                 )}
             </div>
 
-            {/* 输入区 */}
-            <footer className="flex items-end gap-2 border-t bg-card px-3 py-3 md:px-4">
-                <Button variant="ghost" size="icon" className="shrink-0" aria-label="添加好友">
-                    <UserPlus />
-                </Button>
-                <div className="flex min-w-0 flex-1 items-center gap-1 rounded-full border bg-muted/60 px-2 py-1 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
-                    <Button variant="ghost" size="icon" className="size-8 shrink-0 text-muted-foreground hover:text-foreground" aria-label="表情">
-                        <Smile />
-                    </Button>
+            {/* 输入区：纯文字消息 */}
+            <footer className="flex items-center gap-2 border-t bg-card px-3 py-3 md:px-4">
+                <div className="flex min-w-0 flex-1 items-center rounded-full border bg-muted/60 px-4 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
                     <input
                         value={input}
                         onChange={e => setInput(e.target.value)}
@@ -825,11 +806,8 @@ export default function MessagePanel({
                         placeholder={ready ? "输入消息…" : "密钥未就绪，无法发送"}
                         aria-label="消息内容"
                         disabled={!ready}
-                        className="h-8 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
+                        className="h-9 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
                     />
-                    <Button variant="ghost" size="icon" className="size-8 shrink-0 text-muted-foreground hover:text-foreground" aria-label="附件">
-                        <Paperclip />
-                    </Button>
                 </div>
                 <Button
                     size="icon"

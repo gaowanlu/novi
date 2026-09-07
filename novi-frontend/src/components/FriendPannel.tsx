@@ -1,5 +1,5 @@
 import { useId } from "react";
-import { Search, MessageCircle, Users, Plus, LogOut, Info, Home as HomeIcon } from "lucide-react";
+import { MessageCircle, Users, Plus, LogOut, Info, Home as HomeIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { cn } from "@/lib/utils";
@@ -7,7 +7,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { FriendRequestItem } from "@/api/types";
@@ -76,38 +75,24 @@ export default function FriendPanel({
 
     return (
         <aside className={cn("flex h-full min-h-0 flex-col border-r bg-card", className)}>
-            {/* 头部：品牌 + 搜索 */}
-            <div className="flex flex-col gap-3 p-4 pb-3">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                            <MessageCircle className="size-4.5" data-icon="inline-start" />
-                        </div>
-                        <div className="flex flex-col leading-tight">
-                            <span className="text-sm font-semibold tracking-tight">novi</span>
-                            <span className="text-[11px] text-muted-foreground">加密聊天</span>
-                        </div>
+            {/* 头部：品牌 + 操作 */}
+            <div className="flex items-center justify-between p-4 pb-3">
+                <div className="flex items-center gap-2">
+                    <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                        <MessageCircle className="size-4.5" data-icon="inline-start" />
                     </div>
-                    <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="icon" asChild aria-label="个人信息">
-                            <Link to="/user/info"><Info /></Link></Button>
-                        <Button variant="ghost" size="icon" asChild aria-label="退出登录">
-                            <Link to="/logout"><LogOut /></Link></Button>
-                        <Button variant="ghost" size="icon" asChild aria-label="新朋友" className="text-primary-foreground">
-                            <Link to="/new/friend"><Plus /></Link></Button>
+                    <div className="flex flex-col leading-tight">
+                        <span className="text-sm font-semibold tracking-tight">novi</span>
+                        <span className="text-[11px] text-muted-foreground">加密聊天</span>
                     </div>
                 </div>
-
-                <div className="relative">
-                    <Search
-                        data-icon="inline-start"
-                        className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground"
-                    />
-                    <Input
-                        aria-label="搜索好友"
-                        placeholder="搜索或开始新聊天"
-                        className="h-9 rounded-full bg-muted pl-9 text-sm"
-                    />
+                <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="icon" asChild aria-label="个人信息">
+                        <Link to="/user/info"><Info /></Link></Button>
+                    <Button variant="ghost" size="icon" asChild aria-label="退出登录">
+                        <Link to="/logout"><LogOut /></Link></Button>
+                    <Button variant="ghost" size="icon" asChild aria-label="新朋友" className="text-primary-foreground">
+                        <Link to="/new/friend"><Plus /></Link></Button>
                 </div>
             </div>
 
