@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2, AtSign, Mail, User as UserIcon } from 'lucide-react';
+import { Loader2, AtSign, Mail, User as UserIcon, Download, Upload, ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { APIMacro } from '../api/APIMacro';
@@ -13,14 +13,37 @@ import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { downloadKeysBackup, importKeysBackup, parseKeysBackup } from '@/crypto/keyStore';
 
 function UserInfoPage() {
     const [loading, setLoading] = useState(false);
     const [userName, setUserName] = useState('');
     const [email, setEmail] = useState('');
+    const importFileRef = useRef<HTMLInputElement>(null);
 
     const { updateEmailAndUserName } = useAuth();
     const user = useSessionUser();
+
+    const handleImportKeys = () => importFileRef.current?.click();
+
+    const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+            const text = await file.text();
+            const bundle = parseKeysBackup(text);
+            if (bundle.myId !== user.userId) {
+                toast.error('备份不属于当前账号', { description: '请导入你自己导出的密钥文件' });
+                return;
+            }
+            importKeysBackup(bundle);
+            toast.success('密钥已导入', { description: '历史消息现在可重新解密' });
+        } catch (err: any) {
+            toast.error('导入失败', { description: err?.message || '文件格式不正确' });
+        } finally {
+            if (importFileRef.current) importFileRef.current.value = '';
+        }
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -120,6 +143,41 @@ function UserInfoPage() {
                         </Button>
                     </div>
                 </form>
+
+                <Separator />
+
+                {/* 端到端密钥备份（用户自管，平台不持有） */}
+                <div className="flex flex-col gap-3">
+                    <div className="flex items-center gap-2">
+                        <ShieldCheck className="size-4 text-muted-foreground" />
+                        <h2 className="text-sm font-semibold">端到端加密密钥</h2>
+                    </div>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                        你的私钥只保存在本浏览器，平台永不接触。一旦丢失将无法解密与该好友的历史消息，
+                        请定期导出备份并妥善保管（备份文件含私钥，切勿分享给他人）。
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <Button
+                            variant="outline"
+                            className="gap-1.5"
+                            onClick={() => { downloadKeysBackup(user.userId); toast.success('密钥已导出'); }}
+                        >
+                            <Download data-icon="inline-start" className="size-4" />
+                            导出密钥备份
+                        </Button>
+                        <Button variant="outline" className="gap-1.5" onClick={handleImportKeys}>
+                            <Upload data-icon="inline-start" className="size-4" />
+                            导入密钥备份
+                        </Button>
+                    </div>
+                    <input
+                        type="file"
+                        accept="application/json,.json"
+                        className="hidden"
+                        ref={importFileRef}
+                        onChange={handleImportFile}
+                    />
+                </div>
             </div>
         </PageShell>
     );

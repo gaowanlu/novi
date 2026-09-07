@@ -11,10 +11,14 @@ import { useAuth } from "@/context/AuthContext";
 import type { FriendMessageItem, FriendRequestItem, UnreadSummary } from "@/api/types";
 import { toast } from "sonner";
 import { useNoviSocketEvent } from "@/ws/noviSocket";
+import { removeFriendKeys } from "@/crypto/keyStore";
+import { completeTupleFromRequestItem } from "@/crypto/friendKeys";
 
 interface SelectedFriend {
     userId: string;
     userName: string;
+    /** 关系代次（版本号），来自好友申请记录；删除后重新添加会 +1 */
+    novicode?: string | null;
 }
 
 /** 桌面端左侧窄导航栏：品牌 + 页面入口 + 用户操作 */
@@ -74,13 +78,16 @@ function FunctionalPage() {
             if (!res.ok) throw new Error(errorText(res, data));
             const list = (data as FriendRequestItem[]) ?? [];
             setFriendList(list);
+            // 离线补齐：我离线期间对方接受了申请（错过 WS 推送），用列表里的公钥补齐 5 元组，
+            // 进入聊天即可加密（幂等；好友关系完整时绝不触碰已推进的链头）
+            for (const item of list) completeTupleFromRequestItem(myUserId, item);
             // 默认选中第一个好友
             setCurrentFriend(prev => {
                 if (prev) return prev;
                 if (list.length > 0) {
                     const first = list[0];
                     const party = myUserId === first.receiver.userId ? first.requester : first.receiver;
-                    return { userId: party.userId ?? "", userName: party.userName };
+                    return { userId: party.userId ?? "", userName: party.userName, novicode: first.novicode ?? null };
                 }
                 return null;
             });
@@ -133,10 +140,7 @@ function FunctionalPage() {
         if (peerId === currentFriendIdRef.current && !seenMessageIdsRef.current.has(m._id)) {
             seenMessageIdsRef.current.add(m._id);
             appendMessageRef.current?.(m);
-        }
-        // 对方发来的新消息进入已打开会话：立即标记已读，回执会推送回发送方
-        if (m.sender !== myUserId && peerId === currentFriendIdRef.current && !m.readAt) {
-            markReadedRef.current?.([m._id]);
+            // 对方新消息：由 MessagePanel 解密校验后，解密成功才标已读（已读依赖解密成功）
         }
     });
 
@@ -148,9 +152,21 @@ function FunctionalPage() {
         markReadedRef.current?.(ids);
     });
 
-    // 消息解密确认：E2E 落地后用于同步确认状态，当前仅刷新好友列表
+    // 消息解密确认：对方已解密确认 → 刷新好友列表（可选展示「对方已解密」）
     useNoviSocketEvent("novi_friend_message_crypto_ack", () => {
         refreshFriendList();
+    });
+
+    // 好友被删除：清理本地与该好友的密钥 5 元组与链头（尽量无痕）
+    // 注意：WS 推送里 requester/receiver 是原始 ObjectId 字符串
+    useNoviSocketEvent("novi_friend_friend_deleted", (payload) => {
+        const p = payload as { requester?: string | null; receiver?: string | null };
+        const other = p?.requester === myUserId ? p.receiver : p.requester;
+        if (other) {
+            removeFriendKeys(myUserId, other);
+            // 被删好友正是当前打开的会话 → 清空选择（重新添加是新代次，需重新进入加载）
+            if (other === currentFriendIdRef.current) setCurrentFriend(null);
+        }
     });
 
     const handleSelectFriend = (friend: SelectedFriend) => {

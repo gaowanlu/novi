@@ -32,17 +32,30 @@ export interface FriendRequestItem {
     status: 'pending' | 'accepted' | 'rejected' | 'deleted' | 'canceled';
     createdAt: string;
     respondedAt?: string | null;
+    // 发起方公钥（base64 JWK），用于建立友谊时的密钥交换
+    publicKey?: string | null;
+    // 接收方公钥（base64 JWK），接受申请时落库；离线方上线拉取时据此补齐 5 元组
+    receiverPublicKey?: string | null;
+    // 关系代次（版本号），服务器分配：好友删除后重新添加会 +1
+    novicode?: string | null;
     requester: FriendParty;
     receiver: FriendParty;
 }
 
-// 消息
+// 消息（E2E：content 为密文 base64，附 iv/wrappedKey/sig/链 hash/序号）
 export interface FriendMessageItem {
     _id: string;
     noviCode: string;
     sender: string;
     receiver: string;
-    content: string;
+    content: string;      // 密文 base64
+    iv?: string | null;       // AES-GCM IV base64
+    wrappedKey?: string | null; // 用接收方公钥包装的数据密钥 base64
+    wrappedKeySelf?: string | null; // 用发送方自己公钥包装的同一数据密钥 base64（供发送方回读自己历史消息）
+    sig?: string | null;      // 发送方 RSA-PSS 签名 base64
+    preHash?: string | null;  // 上一条 currHash hex（链式）
+    currHash?: string | null; // 本条 currHash hex（链式）
+    seq?: number | null;      // 每 (sender,receiver,noviCode) 序号
     sentAt: string;
     readAt?: string | null;
     cryptoAckAt?: string | null;

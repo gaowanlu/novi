@@ -19,6 +19,15 @@ import { apiFetch } from '@/api/request';
 import { useSessionUser } from '@/context/AuthContext';
 import type { FriendRequestItem } from '@/api/types';
 import { useNoviSocketEvent } from '@/ws/noviSocket';
+import {
+    ensureOwnKeys,
+    finalizeAsReceiver,
+    finalizeAsRequester,
+    completeTupleFromRequestItem,
+    DEFAULT_NOVI_CODE,
+    relabelNovicode
+} from '@/crypto/friendKeys';
+import { removeFriendKeys } from '@/crypto/keyStore';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -82,13 +91,32 @@ export default function NewFriendPage() {
 
     const handleAddFriend = async (_id: string) => {
         try {
+            // 预推导下一个关系代次（与服务器同算法：双向历史记录数 + 1），
+            // 为该代生成密钥对并把公钥带进申请；服务器返回值不一致时 relabel 自愈
+            let novicode = DEFAULT_NOVI_CODE;
+            try {
+                const res0 = await apiFetch(APIMacro.GETFRIENDREQUEST, { method: 'GET' });
+                if (res0.ok) {
+                    const list = (await res0.json()) as FriendRequestItem[];
+                    const count = list.filter(r =>
+                        (r.requester?.userId === _id && r.receiver?.userId === user.userId) ||
+                        (r.requester?.userId === user.userId && r.receiver?.userId === _id)
+                    ).length;
+                    novicode = String(count + 1);
+                }
+            } catch { /* 失败退回 "1"，以服务器返回值自愈 */ }
+
+            const myPublicKey = await ensureOwnKeys(user.userId, _id, novicode);
             const res = await apiFetch(APIMacro.POSTFRIENDREQUEST, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ targetUserId: _id })
+                body: JSON.stringify({ targetUserId: _id, publicKey: myPublicKey })
             });
             const data = await res.json();
             if (res.ok) {
+                // 自愈：服务器分配的代次为准，不一致则重贴本地元组/链头
+                const serverNovi = (data as { novicode?: string | null })?.novicode;
+                if (serverNovi && serverNovi !== novicode) relabelNovicode(user.userId, _id, novicode, serverNovi);
                 toast.success('申请已发送');
                 refreshRequests();
             } else {
@@ -113,6 +141,8 @@ export default function NewFriendPage() {
                     return pa - pb;
                 });
                 setRequests(list);
+                // 离线补齐：申请期间离线、对方已接受的记录，用列表里的公钥补齐 5 元组（幂等）
+                for (const item of list) completeTupleFromRequestItem(user.userId, item);
             }
         } catch { /* 静默 */ }
         finally {
@@ -120,16 +150,34 @@ export default function NewFriendPage() {
         }
     };
 
-    const handleRespond = async (friendRequestId: string, status: 'accepted' | 'rejected') => {
+    const handleRespond = async (friendRequestId: string, status: 'accepted' | 'rejected', item: FriendRequestItem) => {
         try {
+            // 接受时：本端（接收方 B）生成自己的密钥对，带公钥提交；响应带回双方公钥
+            let publicKey: string | undefined;
+            if (status === 'accepted') {
+                const otherId = user.userId === item.receiver.userId ? item.requester.userId! : item.receiver.userId!;
+                publicKey = await finalizeAsReceiver(user.userId, otherId, item.publicKey ?? null, item.novicode ?? DEFAULT_NOVI_CODE);
+            }
             const res = await apiFetch(APIMacro.PUTFRIENDREQUEST, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ friendRequestId, status })
+                body: JSON.stringify({ friendRequestId, status, publicKey })
             });
             const data = await res.json();
-            if (res.ok) refreshRequests();
-            else toast.error(data.message);
+            if (res.ok) {
+                // 双保险：用响应里的双方公钥再补齐一次 5 元组（推送可能先到/未到）
+                if (status === 'accepted') {
+                    const otherId = user.userId === item.receiver.userId ? item.requester.userId! : item.receiver.userId!;
+                    finalizeAsReceiver(
+                        user.userId, otherId,
+                        data?.requesterPublicKey ?? item.publicKey ?? null,
+                        (data as { novicode?: string | null })?.novicode ?? item.novicode ?? DEFAULT_NOVI_CODE
+                    );
+                }
+                refreshRequests();
+            } else {
+                toast.error(data.message);
+            }
         } catch (err: any) {
             toast.error(err?.message);
         }
@@ -155,8 +203,11 @@ export default function NewFriendPage() {
             const params = new URLSearchParams({ targetUserId, friendRequestId });
             const res = await apiFetch(`${APIMacro.DELETEFRIEND}?${params.toString()}`, { method: 'DELETE' });
             const data = await res.json();
-            if (res.ok) refreshRequests();
-            else toast.error(data.message);
+            if (res.ok) {
+                // 删除好友：清理本地与该好友的全部代次密钥与链头（尽量无痕；重新添加会协商新代次）
+                removeFriendKeys(user.userId, targetUserId);
+                refreshRequests();
+            } else toast.error(data.message);
         } catch (err: any) {
             toast.error(err?.message);
         }
@@ -169,8 +220,32 @@ export default function NewFriendPage() {
 
     // 实时刷新申请列表：好友申请到来 / 被处理 / 撤回 / 好友被删除 时立即更新
     useNoviSocketEvent("novi_friend_request_comming", () => refreshRequests());
-    useNoviSocketEvent("novi_friend_request_processed", () => refreshRequests());
-    useNoviSocketEvent("novi_friend_friend_deleted", () => refreshRequests());
+    useNoviSocketEvent("novi_friend_request_processed", (payload) => {
+        refreshRequests();
+        // 密钥交换：被接受时，本端（发起方 A）用推送里的 B 公钥补齐 5 元组。
+        // 注意：WS 推送里 requester/receiver 是原始 ObjectId 字符串（非聚合的 {userId} 对象）。
+        const p = payload as {
+            status?: string;
+            requester?: string | null;
+            receiver?: string | null;
+            requesterPublicKey?: string | null;
+            receiverPublicKey?: string | null;
+            novicode?: string | null;
+        };
+        if (p?.status === "accepted") {
+            const isRequester = p.requester === user.userId;
+            const friendId = isRequester ? p.receiver : p.requester;
+            const friendPub = isRequester ? p.receiverPublicKey : p.requesterPublicKey;
+            if (friendId && friendPub) finalizeAsRequester(user.userId, friendId, friendPub, p.novicode ?? DEFAULT_NOVI_CODE);
+        }
+    });
+    useNoviSocketEvent("novi_friend_friend_deleted", (payload) => {
+        // 好友被删除：清理本地与该好友的密钥（尽量无痕；重新添加会协商新代次密钥）
+        const p = payload as { requester?: string | null; receiver?: string | null };
+        const other = p?.requester === user.userId ? p.receiver : p.requester;
+        if (other) removeFriendKeys(user.userId, other);
+        refreshRequests();
+    });
 
     const pendingIncoming = useMemo(
         () => requests.filter(r => r.status === 'pending' && user.userId === r.receiver.userId).length,
@@ -373,7 +448,7 @@ export default function NewFriendPage() {
                                                             <Button
                                                                 variant="outline"
                                                                 size="sm"
-                                                                onClick={() => handleRespond(item.friendRequestId, 'rejected')}
+                                                                onClick={() => handleRespond(item.friendRequestId, 'rejected', item)}
                                                                 className="gap-1.5"
                                                             >
                                                                 <X data-icon="inline-start" className="size-4" />
@@ -381,7 +456,7 @@ export default function NewFriendPage() {
                                                             </Button>
                                                             <Button
                                                                 size="sm"
-                                                                onClick={() => handleRespond(item.friendRequestId, 'accepted')}
+                                                                onClick={() => handleRespond(item.friendRequestId, 'accepted', item)}
                                                                 className="gap-1.5"
                                                             >
                                                                 <Check data-icon="inline-start" className="size-4" />

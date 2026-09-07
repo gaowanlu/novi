@@ -11,18 +11,26 @@ import { pushToUsers, logPushError } from '../comm/push.js';
 
 const router = Router();
 
-// 向目标好友发送新消息
+// 向目标好友发送新消息（E2E：content 为密文，服务器不持有密钥、不解密、不校验签名/hash）
 // POST message/
 const postFriendMessage = Joi.object({
     noviCode: Joi.string().trim().min(1).max(10).required(),
     receiver: Joi.string().trim().min(10).max(100).required(),
-    // 当前明文阶段上限 200；E2E 落地后 content 变为密文，上限需随之放大
-    content: Joi.string().trim().min(1).max(65535).required()
+    // 密文（base64），上限放大以容纳 AES-GCM 密文
+    content: Joi.string().trim().min(1).max(65535).required(),
+    iv: Joi.string().trim().max(256).required(),
+    wrappedKey: Joi.string().trim().max(2048).required(),
+    // 用发送方自己公钥包装的同一数据密钥（供其回读自己历史消息）。
+    // 用 .optional()：兼容尚未升级的旧客户端（不发该字段），新文档缺该字段时发送方无法自解密，属可接受的退化
+    wrappedKeySelf: Joi.string().trim().max(2048).optional(),
+    sig: Joi.string().trim().max(2048).required(),
+    preHash: Joi.string().trim().hex().length(64).required(),
+    currHash: Joi.string().trim().hex().length(64).required(),
 });
 const postFriendMessagHandler: RequestHandler = async (req: IRequest, res: Response): Promise<void> => {
     const myUserId = req.noviUser?._id as string;
 
-    const { noviCode, receiver, content } = req.body;
+    const { noviCode, receiver, content, iv, wrappedKey, wrappedKeySelf, sig, preHash, currHash } = req.body;
     if (receiver === myUserId) {
         res.status(400).json({ message: '无法向自己发送消息' });
         return
@@ -44,30 +52,57 @@ const postFriendMessagHandler: RequestHandler = async (req: IRequest, res: Respo
             return
         }
 
-        // 新增一条消息
-        const newFriendMessage = new FriendMessage({
-            noviCode: noviCode,
-            sender: myUserId,
-            receiver: receiver,
-            content: content,
-            sentAt: new Date(),
-        });
-        const saveNewFriendMessage = await newFriendMessage.save();
+        // 后端分配 seq：读当前 (sender,receiver,noviCode) 最大序号 +1。
+        // 并发下可能撞唯一索引 (sender,receiver,noviCode,seq)，冲突则重读重试。
+        const MAX_RETRY = 5;
+        let savedMessage: any = null;
+        for (let attempt = 0; attempt < MAX_RETRY && !savedMessage; attempt++) {
+            const last = await FriendMessage.findOne(
+                { sender: myUserId, receiver, noviCode },
+                { seq: 1 }
+            ).sort({ seq: -1 }).lean();
+            const nextSeq = (last?.seq ?? 0) + 1;
 
-        // 消息发送后马上通知给自己和对方
-        if (saveNewFriendMessage) {
             try {
-                await pushToUsers(
-                    [saveNewFriendMessage.sender.toString(), saveNewFriendMessage.receiver.toString()],
-                    'novi_friend_message_comming',
-                    saveNewFriendMessage
-                );
-            } catch (err) {
-                logPushError('novi_friend_message_comming', err);
+                const newFriendMessage = new FriendMessage({
+                    noviCode,
+                    sender: myUserId,
+                    receiver,
+                    content,
+                    iv,
+                    wrappedKey,
+                    wrappedKeySelf,
+                    sig,
+                    preHash,
+                    currHash,
+                    seq: nextSeq,
+                    sentAt: new Date(),
+                });
+                savedMessage = await newFriendMessage.save();
+            } catch (saveErr: any) {
+                // 唯一索引冲突（E11000）→ 重试；其它错误直接抛出
+                if (saveErr?.code === 11000) continue;
+                throw saveErr;
             }
         }
 
-        res.status(200).json(saveNewFriendMessage);
+        if (!savedMessage) {
+            res.status(409).json({ message: '消息序号冲突，请重试' });
+            return
+        }
+
+        // 消息发送后马上通知给自己和对方（payload 含完整密文对象，接收方 WS 收到后本地解密）
+        try {
+            await pushToUsers(
+                [savedMessage.sender.toString(), savedMessage.receiver.toString()],
+                'novi_friend_message_comming',
+                savedMessage
+            );
+        } catch (err) {
+            logPushError('novi_friend_message_comming', err);
+        }
+
+        res.status(200).json(savedMessage);
         return
     } catch (err: any) {
         logger.error(`${err.message}`);
@@ -84,15 +119,49 @@ const getMessageAllFriendHandler: RequestHandler = async (req: IRequest, res: Re
     const myUserId = req.noviUser?._id as string;
 
     try {
+        const myObjectId = mongoose.Types.ObjectId.createFromHexString(myUserId);
         const unreadMessages = await FriendMessage.aggregate([
             {
                 $match: {
-                    receiver: mongoose.Types.ObjectId.createFromHexString(myUserId),
+                    receiver: myObjectId,
                     readAt: null
                 }
             },
             {
                 $sort: { sentAt: -1 } // 先按时间倒序
+            },
+            {
+                // 代次隔离：只保留「当前」好友关系代次的消息（删除后重新添加时，
+                // 旧代次密文用新密钥无法解密；留在汇总里会虚增未读数与预览）
+                $lookup: {
+                    from: 'friendRequests',
+                    let: { sid: '$_id', myId: myObjectId },
+                    pipeline: [
+                        {
+                            $match: {
+                                status: 'accepted',
+                                $or: [
+                                    { $and: [{ $expr: { $eq: ['$requester', '$sid'] } }, { $expr: { $eq: ['$receiver', '$myId'] } }] },
+                                    { $and: [{ $expr: { $eq: ['$requester', '$myId'] } }, { $expr: { $eq: ['$receiver', '$sid'] } }] }
+                                ]
+                            }
+                        },
+                        { $limit: 1 },
+                        { $project: { _id: 0, novicode: 1 } }
+                    ],
+                    as: 'curReq'
+                }
+            },
+            { $unwind: { path: '$curReq', preserveNullAndEmptyArrays: true } },
+            {
+                $match: {
+                    $expr: {
+                        $and: [
+                            { $ne: ['$curReq.novicode', null] },
+                            { $eq: ['$novicode', '$curReq.novicode'] }
+                        ]
+                    }
+                }
             },
             {
                 $group: {
@@ -149,24 +218,28 @@ const getMessagePullUnreadByFriend = Joi.object({
     sender: Joi.string().trim().min(10).max(100).required(),
     before: Joi.date().optional(), // 拉取指定时间及其之前的30条
     after: Joi.date().optional(), // 拉取指定时间及其之后的30条
+    novicode: Joi.string().trim().max(10).optional(), // 关系代次：只拉取指定代次的消息（删除后重新添加时旧代次密文不可解）
 });
 const getMessagePullUnreadByFriendHandler: RequestHandler = async (req: IRequest, res: Response): Promise<void> => {
     try {
         const myUserId = req.noviUser?._id as string;
 
-        const queryObj = req.query as { sender: string, before: string, after: string };
+        const queryObj = req.query as { sender: string, before: string, after: string, novicode?: string };
 
         const senderId = mongoose.Types.ObjectId.createFromHexString(queryObj.sender);
         const myObjectId = mongoose.Types.ObjectId.createFromHexString(myUserId);
 
         // 会话是双向的：既要「对方发给我」，也要「我发给对方」。
         // 参数名 sender 实际指「会话对端」，这里统一用 $or 覆盖两个方向。
-        const conversationFilter = {
+        const conversationFilter: Record<string, any> = {
             $or: [
                 { sender: senderId, receiver: myObjectId },
                 { sender: myObjectId, receiver: senderId }
             ]
         };
+
+        // 关系代次过滤（与 $or 隐式 AND）：删除后重新添加时客户端只拉当前代次消息
+        if (queryObj.novicode) conversationFilter.noviCode = queryObj.novicode;
 
         // 如果指定了before,则直接拉取历史消息
         if (queryObj.before) {
@@ -196,7 +269,8 @@ const getMessagePullUnreadByFriendHandler: RequestHandler = async (req: IRequest
         const firstUnread = await FriendMessage.findOne({
             sender: senderId,
             receiver: myObjectId,
-            readAt: null
+            readAt: null,
+            ...(queryObj.novicode ? { noviCode: queryObj.novicode } : {})
         }).sort({ sentAt: 1 }).lean(); // 第一条未读
 
         // 没有未读消息，取最新10条消息
@@ -251,16 +325,18 @@ const putMessageMarkreadedHandler = async (req: IRequest, res: Response): Promis
         const messageIds = req.body.messageIds as string[];
         const objectIds = messageIds.map((id: string) => mongoose.Types.ObjectId.createFromHexString(id));
 
-        // 找出哪些消息确实属于当前用户且未读
+        // 找出哪些消息确实属于当前用户、未读、且已解密确认（cryptoAckAt 已置）。
+        // 已读依赖解密成功：未 ack 的消息不允许标已读（前端也只在解密成功后才提交）。
         const unreadMessages = await FriendMessage.find({
             _id: { $in: objectIds },
             receiver: mongoose.Types.ObjectId.createFromHexString(myUserId),
-            readAt: null
+            readAt: null,
+            cryptoAckAt: { $ne: null }
         }).select('_id sender receiver').lean();
 
         if (unreadMessages.length === 0) {
             res.status(200).json({
-                message: '没有可标记的未读消息',
+                message: '没有可标记的未读消息（需先解密确认）',
                 updatedIds: []
             });
             return
@@ -268,7 +344,7 @@ const putMessageMarkreadedHandler = async (req: IRequest, res: Response): Promis
 
         // 执行批量更新：过滤条件与上面的 find 完全一致，保证原子且无并发竞态
         const result = await FriendMessage.updateMany(
-            { _id: { $in: objectIds }, receiver: mongoose.Types.ObjectId.createFromHexString(myUserId), readAt: null },
+            { _id: { $in: objectIds }, receiver: mongoose.Types.ObjectId.createFromHexString(myUserId), readAt: null, cryptoAckAt: { $ne: null } },
             { $set: { readAt: new Date() } }
         );
 

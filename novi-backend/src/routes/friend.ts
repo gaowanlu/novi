@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { RequestHandler, Response } from 'express';
 import type { IRequest } from '../comm/request.js';
-import { User, FriendRequest } from '../models/mongoModel.js';
+import { User, FriendRequest, FriendMessage } from '../models/mongoModel.js';
 import Joi from 'joi';
 import middlewareValidate from '../middlewares/middlewareValidate.js';
 import middlewareAuth from '../middlewares/middlewareAuth.js';
@@ -14,7 +14,9 @@ const router = Router();
 // 新增好友申请
 // POST friend/request
 const postFriendRequest = Joi.object({
-    targetUserId: Joi.string().trim().min(10).max(100).required()
+    targetUserId: Joi.string().trim().min(10).max(100).required(),
+    // 发起方公钥（base64 JWK），建立友谊时的密钥交换；服务器只透传，不持有私钥
+    publicKey: Joi.string().trim().max(2048).optional().allow('')
 });
 const postFriendRequestHandler: RequestHandler = async (
     req: IRequest,
@@ -22,6 +24,7 @@ const postFriendRequestHandler: RequestHandler = async (
 ): Promise<void> => {
     const myUserId = req.noviUser?._id;
     const targetUserId = req.body.targetUserId;
+    const publicKey = (req.body.publicKey as string) || undefined;
     if (myUserId === targetUserId) {
         res.status(400).json({ message: '不能添加自己为好友' });
         return
@@ -50,11 +53,25 @@ const postFriendRequestHandler: RequestHandler = async (
             return
         }
 
-        // 没有的话就增加一条请求记录
+        // 分配关系代次（novicode）：统计双方双向的全部历史记录数 + 1。
+        // 记录只翻转状态、从不硬删 → 计数单调递增：首次添加 = "1"，删除后重新添加 = "2"…
+        // 客户端从新鲜 GET 预推导同值；不一致（并发竞态）时客户端按服务器值 relabel 自愈。
+        const novicode = String(
+            (await FriendRequest.countDocuments({
+                $or: [
+                    { requester: myUserId, receiver: targetUserId },
+                    { requester: targetUserId, receiver: myUserId }
+                ]
+            })) + 1
+        );
+
+        // 没有的话就增加一条请求记录（带上发起方公钥与关系代次）
         const newFriendRequest = new FriendRequest({
             requester: myUserId,
             receiver: targetUserId,
-            status: 'pending'
+            status: 'pending',
+            publicKey,
+            novicode
         });
         const saveNewFriendRequest = await newFriendRequest.save();
 
@@ -93,6 +110,12 @@ interface FriendRequestResponse {
     friendRequestId: mongoose.Types.ObjectId
     status: string
     createdAt: Date
+    // 发起方公钥（base64 JWK），客户端据此补齐与好友的 5 元组
+    publicKey: string | null
+    // 接收方公钥（base64 JWK），接受申请时写入；离线方上线拉取时据此补齐 5 元组
+    receiverPublicKey: string | null
+    // 关系代次（版本号），服务器分配：好友删除后重新添加 +1
+    novicode: string | null
     requester: {
         userId: mongoose.Types.ObjectId
         userName: string
@@ -153,6 +176,9 @@ const buildFriendRequestPipeline = (myUserId: string, status?: string) => {
                 friendRequestId: '$_id',
                 status: 1,
                 createdAt: 1,
+                publicKey: { $ifNull: ['$publicKey', null] },
+                receiverPublicKey: { $ifNull: ['$receiverPublicKey', null] },
+                novicode: { $ifNull: ['$novicode', null] },
                 'requester.userId': '$requester._id',
                 'requester.userName': { $ifNull: ['$requester.userName', '对方账号已注销'] },
                 'receiver.userId': '$receiver._id',
@@ -185,7 +211,9 @@ router.get('/request', middlewareAuth, getFriendRequestHandler);
 // PUT friend/request
 const putFriendRequest = Joi.object({
     friendRequestId: Joi.string().trim().min(10).max(100).required(),
-    status: Joi.string().trim().valid('accepted', 'rejected').required()
+    status: Joi.string().trim().valid('accepted', 'rejected').required(),
+    // 接收方（B）接受时带上自己的公钥（base64 JWK），完成密钥交换
+    publicKey: Joi.string().trim().max(2048).optional().allow('')
 });
 const putFriendRequestHandler: RequestHandler = async (
     req: IRequest,
@@ -193,10 +221,11 @@ const putFriendRequestHandler: RequestHandler = async (
 ): Promise<void> => {
     const myUserId = req.noviUser?._id as string;
     const { friendRequestId, status } = req.body;
+    const acceptPublicKey = (req.body.publicKey as string) || undefined;
 
     try {
         let friendRequestById = await FriendRequest.findOne({ _id: friendRequestId }).
-            select('_id requester receiver status');
+            select('_id requester receiver status publicKey novicode');
         if (!friendRequestById) {
             res.status(400).json({ message: '未找到目标申请记录' });
             return
@@ -217,29 +246,54 @@ const putFriendRequestHandler: RequestHandler = async (
             return
         }
 
+        // 接受时把接收方公钥落库：发起方若离线（错过 WS 推送），上线后 GET 也能拉到，补齐 5 元组。
+        // 公钥只是交换材料，落库不违背「服务器不持有私钥」不变量。
         await FriendRequest.updateOne({ _id: friendRequestById._id },
             {
-                $set: { status: status, respondedAt: new Date() }
+                $set: {
+                    status: status,
+                    respondedAt: new Date(),
+                    receiverPublicKey: status === 'accepted' ? (acceptPublicKey ?? null) : null
+                }
             }
         );
 
         let friendRequestByIdUpdated = await FriendRequest.findOne({ _id: friendRequestId }).
-            select('_id requester receiver status');
+            select('_id requester receiver status publicKey novicode');
 
-        // 好友申请状态更新后马上通知给自己和对方
+        // 密钥交换：接受时把双方公钥都带出去，让 A、B 各自补齐 5 元组。
+        // requesterPublicKey = 发起方(A)公钥（申请时已存）；receiverPublicKey = 接收方(B)公钥（本次带入）
+        const requesterPublicKey = friendRequestByIdUpdated?.publicKey ?? null;
+        const receiverPublicKey = status === 'accepted' ? (acceptPublicKey ?? null) : null;
+
+        // 好友申请状态更新后马上通知给自己和对方（带双方公钥，离线方上线拉取也能拿到）
         if (friendRequestByIdUpdated) {
             try {
+                const pushPayload: Record<string, any> = {
+                    _id: friendRequestByIdUpdated._id,
+                    requester: friendRequestByIdUpdated.requester,
+                    receiver: friendRequestByIdUpdated.receiver,
+                    status: friendRequestByIdUpdated.status,
+                    respondedAt: friendRequestByIdUpdated.respondedAt,
+                    requesterPublicKey,
+                    receiverPublicKey,
+                    novicode: friendRequestByIdUpdated.novicode ?? null
+                };
                 await pushToUsers(
                     [friendRequestByIdUpdated.receiver.toString(), friendRequestByIdUpdated.requester.toString()],
                     'novi_friend_request_processed',
-                    friendRequestByIdUpdated
+                    pushPayload
                 );
             } catch (err) {
                 logPushError('novi_friend_request_processed', err);
             }
         }
 
-        res.status(200).json(friendRequestByIdUpdated);
+        res.status(200).json({
+            ...friendRequestByIdUpdated,
+            requesterPublicKey,
+            receiverPublicKey
+        });
         return
     } catch (err: any) {
         logger.error(`${err.message}`);
@@ -288,6 +342,15 @@ const deleteFriendHandler: RequestHandler = async (
             res.status(500).json({ message: '标记解除好友关系异常' });
             return
         }
+
+        // plan.md：删除好友同时删除聊天记录（无痕）——旧代次密文用新密钥无法解密，
+        // 留在库里会污染新友谊的未读汇总 / 拉取窗口
+        await FriendMessage.deleteMany({
+            $or: [
+                { sender: myUserId, receiver: targetUserId },
+                { sender: targetUserId, receiver: myUserId }
+            ]
+        });
 
         const deletedFriendRequest = await FriendRequest.findOne({ _id: targetFriendRequest._id });
 

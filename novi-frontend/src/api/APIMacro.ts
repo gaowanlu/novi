@@ -14,6 +14,7 @@ const MESSAGE = `/api/message`;
 const MESSAGE_PULL = `/api/message/pull/unread/byfriend`;
 const MESSAGE_ALLFRIEND = `/api/message/allfriend`;
 const MESSAGE_MARKREADED = `/api/message/markreaded`;
+const MESSAGE_CRYPTO_ACK = `/api/message/crypto/ack`;
 
 const APIMacro = {
     HOST, // 服务地址
@@ -34,6 +35,7 @@ const APIMacro = {
     GETMESSAGE_PULL: `${HOST}${MESSAGE_PULL}`, // 拉取与某好友的会话（未读/历史）
     GETMESSAGE_ALLFRIEND: `${HOST}${MESSAGE_ALLFRIEND}`, // 拉取全部好友未读汇总
     PUTMESSAGE_MARKREADED: `${HOST}${MESSAGE_MARKREADED}`, // 标记消息已读
+    PUTMESSAGE_CRYPTO_ACK: `${HOST}${MESSAGE_CRYPTO_ACK}`, // 确认消息解密成功
 };
 
 export { APIMacro };

@@ -15,6 +15,8 @@ import type { FriendRequestItem } from "@/api/types";
 interface SelectedFriend {
     userId: string;
     userName: string;
+    /** 关系代次（版本号），来自好友申请记录；删除后重新添加会 +1 */
+    novicode?: string | null;
 }
 
 interface FriendPanelProps {
@@ -156,7 +158,7 @@ export default function FriendPanel({
                             <li key={item.friendRequestId} role="option" aria-selected={active}>
                                 <button
                                     type="button"
-                                    onClick={() => onSelectFriend?.({ userId: friend.userId!, userName: friend.userName })}
+                                    onClick={() => onSelectFriend?.({ userId: friend.userId!, userName: friend.userName, novicode: item.novicode ?? null })}
                                     className={cn(
                                         "group flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors",
                                         active
