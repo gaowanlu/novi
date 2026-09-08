@@ -33,8 +33,8 @@ const PRINCIPLES = [
 
 export default function AboutPage() {
     return (
-        <div className="flex min-h-dvh flex-col bg-background">
-            <header className="border-b px-6 py-3">
+        <div className="flex min-h-dvh flex-col bg-wa-50 text-wa-900 dark:bg-[#111b21] dark:text-[#e9edef]">
+            <header className="border-b border-wa-100 px-6 py-3 dark:border-white/10">
                 <div className="mx-auto flex w-full max-w-4xl items-center gap-2">
                     <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                         <Lock className="size-4" data-icon="inline-start" />
@@ -68,7 +68,7 @@ export default function AboutPage() {
                     {/* 理念 */}
                     <section className="grid gap-4 md:grid-cols-3">
                         {PRINCIPLES.map(p => (
-                            <Card key={p.title} className="gap-0">
+                            <Card key={p.title} className="gap-0 border-wa-100 bg-white dark:border-white/10 dark:bg-[#162229]">
                                 <CardContent className="flex flex-col gap-3 p-5">
                                     <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
                                         <p.icon className="size-5" data-icon="inline-start" />

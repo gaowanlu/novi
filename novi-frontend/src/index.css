@@ -39,6 +39,21 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  --color-wa: var(--wa);
+  --color-wa-600: var(--wa-600);
+  --color-wa-700: var(--wa-700);
+  --color-wa-header: var(--wa-header);
+  --color-wa-header-fg: var(--wa-header-fg);
+  --color-wa-panel: var(--wa-panel);
+  --color-wa-panel-fg: var(--wa-panel-fg);
+  --color-wa-panel-muted: var(--wa-panel-muted);
+  --color-wa-wallpaper: var(--wa-wallpaper);
+  --color-wa-bubble: var(--wa-bubble);
+  --color-wa-bubble-in: var(--wa-bubble-in);
+  --color-wa-bubble-fg: var(--wa-bubble-fg);
+  --color-wa-ink: var(--wa-ink);
+  --color-wa-muted: var(--wa-muted);
+  --color-wa-line: var(--wa-line);
 }
 
 :root {
@@ -74,6 +89,23 @@
   --sidebar-accent-foreground: oklch(0.205 0.005 179);
   --sidebar-border: oklch(0.922 0.004 179);
   --sidebar-ring: oklch(0.761 0.2015 149.74);
+
+  /* WhatsApp-style chat palette (light) */
+  --wa: oklch(0.85 0.17 160);
+  --wa-600: oklch(0.76 0.18 160);
+  --wa-700: oklch(0.65 0.17 160);
+  --wa-header: oklch(0.65 0.15 160);
+  --wa-header-fg: oklch(0.99 0 0);
+  --wa-panel: oklch(1 0 0);
+  --wa-panel-fg: oklch(0.18 0 0);
+  --wa-panel-muted: oklch(0.56 0.01 165);
+  --wa-wallpaper: oklch(0.965 0.01 120);
+  --wa-bubble: oklch(0.99 0 0);
+  --wa-bubble-in: oklch(0.98 0 0);
+  --wa-bubble-fg: oklch(0.18 0 0);
+  --wa-ink: oklch(0.2 0 0);
+  --wa-muted: oklch(0.56 0.01 165);
+  --wa-line: oklch(0.91 0.01 165);
 }
 
 .dark {
@@ -108,6 +140,23 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.761 0.2015 149.74);
+
+  /* WhatsApp-style chat palette (dark) */
+  --wa: oklch(0.5 0.09 160);
+  --wa-600: oklch(0.43 0.1 160);
+  --wa-700: oklch(0.36 0.09 160);
+  --wa-header: oklch(0.2 0.04 160);
+  --wa-header-fg: oklch(0.96 0 0);
+  --wa-panel: oklch(0.19 0 0);
+  --wa-panel-fg: oklch(0.97 0 0);
+  --wa-panel-muted: oklch(0.7 0.02 160);
+  --wa-wallpaper: oklch(0.17 0.01 160);
+  --wa-bubble: oklch(0.25 0.02 160);
+  --wa-bubble-in: oklch(0.2 0 0);
+  --wa-bubble-fg: oklch(0.97 0 0);
+  --wa-ink: oklch(0.92 0 0);
+  --wa-muted: oklch(0.66 0.02 160);
+  --wa-line: oklch(1 0 0 / 12%);
 }
 
 @layer base {
@@ -117,4 +166,15 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* WhatsApp-style chat wallpaper: base tint + faint repeating doodle texture.
+   Toggling `.dark` on an ancestor swaps the whole palette (both layers). */
+.chat-wallpaper {
+  background-color: var(--wa-wallpaper);
+  background-image:
+    radial-gradient(120px 120px at 18% 22%, color-mix(in oklab, var(--wa-ink) 7%, transparent) 0, transparent 60%),
+    radial-gradient(90px 90px at 82% 68%, color-mix(in oklab, var(--wa-ink) 6%, transparent) 0, transparent 55%),
+    radial-gradient(70px 70px at 45% 92%, color-mix(in oklab, var(--wa-ink) 5%, transparent) 0, transparent 60%);
+  background-size: 280px 280px, 240px 240px, 220px 220px;
 }

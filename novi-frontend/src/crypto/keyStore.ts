@@ -191,6 +191,21 @@ export function importKeysBackup(bundle: KeyBundle): void {
     writeHeads(myId, heads);
 }
 
+/** 删除当前用户的全部密钥与链头（清空本地密钥） */
+export function clearKeys(myId: string): void {
+    const rawTuples = localStorage.getItem(STORE_KEY);
+    const allTuples: Record<string, FriendKeyTuple[]> | null = rawTuples ? JSON.parse(rawTuples) : null;
+    if (allTuples) delete allTuples[myId];
+    if (allTuples && Object.keys(allTuples).length > 0) localStorage.setItem(STORE_KEY, JSON.stringify(allTuples));
+    else localStorage.removeItem(STORE_KEY);
+
+    const rawHeads = localStorage.getItem(HEADS_KEY);
+    const allHeads: Record<string, Record<string, string>> | null = rawHeads ? JSON.parse(rawHeads) : null;
+    if (allHeads) delete allHeads[myId];
+    if (allHeads && Object.keys(allHeads).length > 0) localStorage.setItem(HEADS_KEY, JSON.stringify(allHeads));
+    else localStorage.removeItem(HEADS_KEY);
+}
+
 /** 解析并校验备份文件内容 */
 export function parseKeysBackup(text: string): KeyBundle {
     const obj = JSON.parse(text) as KeyBundle;

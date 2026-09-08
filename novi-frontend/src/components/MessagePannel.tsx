@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
     ArrowDown,
@@ -6,12 +6,15 @@ import {
     CheckCheck,
     Clock3,
     Lock,
+    MessageCircle,
+    Plus,
     SendHorizontal,
     ShieldAlert,
     ShieldCheck
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { Link } from "react-router-dom";
 import {
     Message,
     MessageContent,
@@ -32,6 +35,7 @@ import {
     encryptMessage,
     decryptMessage,
     publicFingerprint,
+    jwkToB64,
     GENESIS_PRE_HASH,
     type DecryptStatus
 } from "@/crypto/crypto";
@@ -50,6 +54,9 @@ interface UserInfo {
 }
 
 const PAGE_SIZE = 30;
+
+// 头像底色：品牌绿；在白底面板上更亮、在绿色头部/深色上更深，保证两种场景下都可辨识
+const AVATAR_BG_CLASS = "bg-[oklch(0.8_0.17_158)] dark:bg-[oklch(0.62_0.14_160)]";
 
 /** 解密后的本地视图：在服务端密文消息上叠加明文/校验状态/指纹 */
 interface DisplayMessage extends FriendMessageItem {
@@ -74,9 +81,9 @@ const formatDay = (iso: string) => {
 
 /** 消息状态图标：未读=单勾，已读=双勾 */
 const ReadTicks = ({ read, sending }: { read: boolean; sending: boolean }) => {
-    if (sending) return <Clock3 data-icon="inline-end" className="size-3.5" aria-label="发送中" />;
-    if (read) return <CheckCheck data-icon="inline-end" className="size-3.5" aria-label="对方已读" />;
-    return <Check data-icon="inline-end" className="size-3.5" aria-label="已送达" />;
+    if (sending) return <Clock3 data-icon="inline-end" className="size-3.5 text-[#8ed6bb]" aria-label="发送中" />;
+    if (read) return <CheckCheck data-icon="inline-end" className="size-3.5 text-[#8ed6bb]" aria-label="对方已读" />;
+    return <Check data-icon="inline-end" className="size-3.5 text-[#8ed6bb]" aria-label="已送达" />;
 };
 
 export default function MessagePanel({
@@ -212,7 +219,7 @@ export default function MessagePanel({
             });
             if (result.status === "ok") {
                 // 本条签名方公钥指纹（校验通过后展示，供用户核对）
-                const fp = await publicFingerprint(jwkB64(tuple.friendPublicKey));
+                const fp = await publicFingerprint(jwkToB64(tuple.friendPublicKey));
                 setMessages(prev => prev.map(x => x._id === m._id
                     ? { ...x, plain: result.text, verifyStatus: "ok", fingerprint: fp } : x));
                 // 解密成功 → crypto/ack（去抖批量）；链头由调用方统一推进
@@ -377,7 +384,7 @@ export default function MessagePanel({
                 if (ok) {
                     const tuple = getTuple(myUserId, friend.userId, novicode);
                     if (tuple?.friendPublicKey?.n) {
-                        setFriendFingerprint(await publicFingerprint(jwkB64(tuple.friendPublicKey)));
+                        setFriendFingerprint(await publicFingerprint(jwkToB64(tuple.friendPublicKey)));
                     }
                 }
                 const res = await apiFetch(
@@ -391,6 +398,9 @@ export default function MessagePanel({
                 setMessages(list);
                 prevLenRef.current = list.length;
                 setHasMore(list.length >= PAGE_SIZE);
+
+                // 初始加载完成 → 滚动到最新消息（useLayoutEffect 可能因批处理未触发）
+                if (list.length > 0) scrollToBottom(false);
 
                 // 整段按时间升序校验（双向都走链）：对方消息完整自校验、自己消息仅链衔接。
                 // 窗口首条的前驱不在窗口内 → skipPreCheck 只查自洽；窗口尾部 currHash 落库为链头。
@@ -483,7 +493,8 @@ export default function MessagePanel({
     }, []);
 
     // 新消息：在底部附近 → 平滑滚到底；否则累计新消息计数
-    useEffect(() => {
+    // 用 useLayoutEffect 确保 DOM 已更新后再滚动（初始加载/切换会话时内容才刚渲染）
+    useLayoutEffect(() => {
         const grew = messages.length - prevLenRef.current;
         prevLenRef.current = messages.length;
         if (grew <= 0) return;
@@ -640,37 +651,43 @@ export default function MessagePanel({
 
     if (!friend) {
         return (
-            <section className="flex h-full min-h-0 flex-col items-center justify-center gap-4 bg-muted/30 px-6 text-center">
-                <div className="flex size-16 items-center justify-center rounded-full bg-card ring-1 ring-border">
-                    <Lock className="size-7 text-muted-foreground" />
+            <section className="chat-wallpaper flex h-full min-h-0 flex-col items-center justify-center gap-5 px-6 text-center">
+                <div className="flex size-20 items-center justify-center rounded-full bg-white/70 shadow-sm ring-1 ring-wa-line backdrop-blur dark:bg-black/30">
+                    <Lock className="size-8 text-wa-700" />
                 </div>
-                <div className="flex flex-col gap-1">
-                    <h2 className="text-base font-semibold">选择一个好友开始聊天</h2>
-                    <p className="max-w-xs text-sm text-muted-foreground">
+                <div className="flex flex-col gap-1.5">
+                    <h2 className="text-lg font-semibold text-wa-ink">选择一个好友开始聊天</h2>
+                    <p className="max-w-xs text-sm text-wa-muted">
                         每段友谊都拥有独立的加密密钥对，平台永远无法读取你的内容。
                     </p>
                 </div>
+                <Button asChild className="mt-1">
+                    <Link to="/new/friend">
+                        <Plus data-icon="inline-start" className="size-4" />
+                        添加好友
+                    </Link>
+                </Button>
             </section>
         );
     }
 
     return (
-        <section className="flex h-full min-h-0 flex-1 flex-col bg-muted/30">
+        <section className="chat-wallpaper flex h-full min-h-0 flex-1 flex-col text-wa-bubble-fg">
             {/* 顶栏 */}
-            <header className="flex items-center gap-3 border-b bg-card px-4 py-2.5">
+            <header className="flex items-center gap-3 bg-wa-header px-3 py-2.5 text-wa-header-fg">
                 <Avatar className="size-10 shrink-0">
-                    <AvatarFallback className="bg-secondary text-sm font-medium text-secondary-foreground">
+                    <AvatarFallback className={AVATAR_BG_CLASS + " text-sm font-medium text-wa-header-fg"}>
                         {friend.userName?.trim()?.slice(0, 2) || "?"}
                     </AvatarFallback>
                 </Avatar>
                 <div className="flex min-w-0 flex-1 flex-col leading-tight">
-                    <span className="truncate text-sm font-semibold">{friend.userName}</span>
-                    <span className="flex items-center gap-1 truncate text-[11px] text-muted-foreground">
+                    <span className="truncate text-[15px] font-semibold">{friend.userName}</span>
+                    <span className="flex items-center gap-1 truncate text-[11px] text-white/75">
                         <Lock data-icon="inline-start" className="size-3" />
                         端到端加密
                         {friendFingerprint && (
                             <span className="font-mono" title="对方公钥指纹，请线下核对以防中间人">
-                                · 指纹 {friendFingerprint}
+                                · {friendFingerprint}
                             </span>
                         )}
                     </span>
@@ -679,8 +696,8 @@ export default function MessagePanel({
 
             {/* 密钥未就绪提示 */}
             {!ready && (
-                <div className="flex items-center gap-2 border-b bg-destructive/10 px-4 py-1.5 text-xs text-destructive">
-                    <ShieldAlert data-icon="inline-start" className="size-3.5 shrink-0" />
+                <div className="flex items-center gap-2 border-b border-wa-line bg-wa-bubble-in px-4 py-1.5 text-xs text-wa-panel-fg">
+                    <ShieldAlert data-icon="inline-start" className="size-3.5 shrink-0 text-destructive" />
                     尚未建立加密密钥（需双方都完成好友接受流程）。请在「新朋友」里重新接受该好友关系。
                 </div>
             )}
@@ -706,11 +723,11 @@ export default function MessagePanel({
                         </div>
                     ) : messages.length === 0 ? (
                         <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-                            <Badge variant="secondary" className="gap-1.5 rounded-full px-3 py-1 text-xs">
+                            <Badge variant="secondary" className="gap-1.5 rounded-full bg-white/70 px-3 py-1 text-xs text-wa-muted dark:bg-black/30">
                                 <Lock data-icon="inline-start" className="size-3" />
                                 消息受端到端加密保护
                             </Badge>
-                            <p className="mt-2 text-sm text-muted-foreground">还没有消息，打个招呼吧</p>
+                            <p className="mt-2 text-sm text-wa-muted">还没有消息，打个招呼吧</p>
                         </div>
                     ) : (
                         <div className="mx-auto flex max-w-3xl flex-col gap-1">
@@ -724,8 +741,8 @@ export default function MessagePanel({
                             )}
                             {groups.map(group => (
                                 <div key={group.day} className="flex flex-col gap-1">
-                                    <Marker variant="separator" className="my-3">
-                                        <Badge variant="secondary" className="gap-1.5 rounded-full bg-muted/80 px-2.5 py-0.5 text-[11px] font-normal text-muted-foreground hover:bg-muted/80">
+                                    <Marker variant="separator" className="my-3 [&_span]:mx-0">
+                                        <Badge variant="secondary" className="gap-1.5 rounded-md bg-wa-bubble px-2.5 py-1 text-[11px] font-medium text-wa-muted shadow-sm hover:bg-wa-bubble">
                                             <Lock data-icon="inline-start" className="size-3" />
                                             {group.day}
                                         </Badge>
@@ -738,24 +755,30 @@ export default function MessagePanel({
                                             return (
                                                 <Message key={msg._id} align={mine ? "end" : "start"}>
                                                     <MessageContent>
-                                                        <MessageHeader>
+                                                        <MessageHeader className="px-2 text-wa-muted">
                                                             {!mine && <span>{friend.userName}</span>}
                                                         </MessageHeader>
                                                         <Bubble
-                                                            variant={mine ? "default" : (body.failed ? "destructive" : "secondary")}
+                                                            variant={body.failed ? "destructive" : mine ? "default" : "secondary"}
                                                             align={mine ? "end" : "start"}
                                                         >
-                                                            <BubbleContent>
+                                                            <BubbleContent
+                                                                className={
+                                                                    mine
+                                                                        ? "rounded-xl rounded-tr-[3px] bg-[#d9fdd3] text-[#111b21] dark:bg-[#005c4b] dark:text-[#e9edef]"
+                                                                        : "rounded-xl rounded-tl-[3px] bg-white text-[#111b21] shadow-sm dark:bg-[#202c33] dark:text-[#e9edef]"
+                                                                }
+                                                            >
                                                                 <p className="whitespace-pre-wrap break-words">{body.text}</p>
                                                                 {body.badge && body.badge}
                                                             </BubbleContent>
-                                                            <MessageFooter className="gap-1">
-                                                                <span className="tabular-nums">
+                                                            <MessageFooter className="gap-1 px-3 text-[11px]">
+                                                                <span className="tabular-nums text-wa-muted">
                                                                     {formatTime(msg.sentAt)}
                                                                 </span>
                                                                 {msg.fingerprint && !body.failed && (
                                                                     <span
-                                                                        className="inline-flex items-center gap-0.5 font-mono text-[10px] text-muted-foreground"
+                                                                        className="inline-flex items-center gap-0.5 font-mono text-[10px] text-wa-muted"
                                                                         title={`签名指纹 ${msg.fingerprint}（与头部一致即未被篡改）`}
                                                                     >
                                                                         <ShieldCheck data-icon="inline-start" className="size-3" />
@@ -783,7 +806,7 @@ export default function MessagePanel({
                     <button
                         type="button"
                         onClick={() => { scrollToBottom(true); setNewCount(0); }}
-                        className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border bg-card px-3 py-1.5 text-xs font-medium shadow-md transition-colors hover:bg-accent"
+                        className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-wa-line bg-white px-3 py-1.5 text-xs font-medium text-wa-ink shadow-md transition-colors hover:bg-wa-bubble-in dark:bg-[#202c33] dark:text-wa-panel-fg"
                     >
                         {newCount > 0 && (
                             <Badge className="h-4 min-w-4 gap-0 rounded-full bg-primary px-1 text-[10px] text-primary-foreground">
@@ -797,8 +820,9 @@ export default function MessagePanel({
             </div>
 
             {/* 输入区：纯文字消息 */}
-            <footer className="flex items-center gap-2 border-t bg-card px-3 py-3 md:px-4">
-                <div className="flex min-w-0 flex-1 items-center rounded-full border bg-muted/60 px-4 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
+            <footer className="flex items-center gap-2 border-t border-wa-line bg-[#f0f2f5] px-3 py-2.5 md:px-4 dark:bg-[#202c33]">
+                <div className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-transparent bg-white px-4 focus-within:border-wa-line dark:bg-[#233138]">
+                    <MessageCircle className="size-5 shrink-0 text-wa-muted" data-icon="inline-start" />
                     <input
                         value={input}
                         onChange={e => setInput(e.target.value)}
@@ -806,7 +830,7 @@ export default function MessagePanel({
                         placeholder={ready ? "输入消息…" : "密钥未就绪，无法发送"}
                         aria-label="消息内容"
                         disabled={!ready}
-                        className="h-9 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:opacity-50"
+                        className="h-9 min-w-0 flex-1 bg-transparent text-sm text-wa-ink outline-none placeholder:text-wa-muted disabled:opacity-50"
                     />
                 </div>
                 <Button
@@ -816,7 +840,7 @@ export default function MessagePanel({
                     disabled={!input.trim() || sending || !ready}
                     aria-label="发送"
                 >
-                    <SendHorizontal />
+                    <SendHorizontal className="-rotate-45" />
                 </Button>
             </footer>
         </section>
@@ -844,15 +868,4 @@ function renderBody(msg: DisplayMessage): { text: string; failed: boolean; badge
     return { text: m.text, failed: true, badge: <Badge variant="destructive" className="ml-2">{m.badge}</Badge> };
 }
 
-// ---------- 本地小工具 ----------
-// JWK -> base64（与 crypto.ts 的 jwkToB64 等价，避免循环导入用内联实现）
-function jwkB64(jwk: JsonWebKey): string {
-    const keys = ["kty", "e", "n", "alg", "use"];
-    const ordered: Record<string, unknown> = {};
-    for (const k of keys) if (jwk[k as keyof JsonWebKey] !== undefined) ordered[k] = jwk[k as keyof JsonWebKey];
-    for (const k of Object.keys(jwk).sort()) if (!(k in ordered)) ordered[k] = jwk[k as keyof JsonWebKey];
-    const bytes = new TextEncoder().encode(JSON.stringify(ordered));
-    let bin = "";
-    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-    return btoa(bin);
-}
+

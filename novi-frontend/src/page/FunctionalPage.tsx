@@ -156,7 +156,7 @@ function FunctionalPage() {
     }, []);
 
     return (
-        <div className="flex h-dvh w-full overflow-hidden bg-background">
+        <div className="flex h-dvh w-full overflow-hidden bg-wa-panel">
             {/* 桌面端窄导航 */}
             <NavRail />
 

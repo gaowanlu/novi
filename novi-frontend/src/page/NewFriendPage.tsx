@@ -253,14 +253,14 @@ export default function NewFriendPage() {
     );
 
     return (
-        <div className="flex min-h-dvh flex-col bg-muted/30">
+        <div className="flex min-h-dvh flex-col bg-wa-panel text-wa-panel-fg">
             {/* 顶部栏 */}
-            <header className="sticky top-0 z-10 flex items-center gap-3 border-b bg-background px-4 py-3 md:px-6">
-                <Button variant="ghost" size="icon" asChild aria-label="返回聊天">
+            <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-wa-line bg-wa-header px-4 py-3 text-wa-header-fg md:px-6">
+                <Button variant="ghost" size="icon" asChild aria-label="返回聊天" className="text-wa-header-fg hover:bg-white/15 hover:text-wa-header-fg">
                     <Link to="/functional"><ArrowLeft /></Link></Button>
                 <div className="flex flex-col leading-tight">
                     <h1 className="text-base font-semibold tracking-tight">新朋友</h1>
-                    <p className="text-xs text-muted-foreground">查找用户 · 管理好友关系</p>
+                    <p className="text-xs text-white/70">查找用户 · 管理好友关系</p>
                 </div>
             </header>
 

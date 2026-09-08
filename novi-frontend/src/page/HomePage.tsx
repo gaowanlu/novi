@@ -5,6 +5,8 @@ import {
     Zap,
     MessageCircle,
     ArrowRight,
+    CheckCheck,
+    SendHorizontal,
     Sparkles
 } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -13,6 +15,9 @@ import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+
+/** 品牌绿的 WhatsApp 头像底色（与聊天页头像一致） */
+const AVATAR_BG = "bg-[oklch(0.78_0.14_160)]";
 
 const FEATURES = [
     {
@@ -36,9 +41,9 @@ export default function HomePage() {
     const { user } = useAuth();
 
     return (
-        <div className="flex min-h-dvh flex-col bg-background">
+        <div className="flex min-h-dvh flex-col bg-wa-50 text-wa-900 dark:bg-[#111b21] dark:text-[#e9edef]">
             {/* 顶栏 */}
-            <header className="sticky top-0 z-10 flex items-center justify-between border-b bg-background/80 px-6 py-3 backdrop-blur">
+            <header className="sticky top-0 z-10 flex items-center justify-between border-b border-wa-100 bg-wa-50/80 px-6 py-3 backdrop-blur dark:border-white/10 dark:bg-[#111b21]/80">
                 <Link to="/" className="flex items-center gap-2" aria-label="novi 首页">
                     <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                         <MessageCircle className="size-4.5" data-icon="inline-start" />
@@ -105,9 +110,47 @@ export default function HomePage() {
                                     <ArrowRight data-icon="inline-end" className="size-4" />
                                 </Link>
                             </Button>
-                            <Button asChild size="lg" variant="outline" className="h-11 rounded-full px-6">
+                            <Button asChild size="lg" variant="outline" className="h-11 rounded-full border-wa-200 bg-white text-wa-900 hover:bg-wa-100 dark:border-white/15 dark:bg-transparent dark:text-white dark:hover:bg-white/10">
                                 <Link to="/about">了解更多</Link>
                             </Button>
+                        </div>
+                    </motion.div>
+
+                    {/* WhatsApp 应用预览 */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.5, delay: 0.15 }}
+                        className="mt-4 w-full max-w-md overflow-hidden rounded-3xl border border-wa-100 bg-white shadow-2xl dark:border-white/10 dark:bg-[#202c33]"
+                    >
+                        <div className="flex items-center gap-2.5 bg-[#008069] px-4 py-3 text-white dark:bg-[#202c33] dark:border-b dark:border-white/10">
+                            <div className={`flex size-9 items-center justify-center rounded-full ${AVATAR_BG} text-xs font-semibold text-white`}>阿
+                            </div>
+                            <div className="flex flex-col leading-tight">
+                                <span className="text-sm font-semibold">阿明</span>
+                                <span className="flex items-center gap-1 text-[11px] text-white/70">
+                                    <Lock data-icon="inline-start" className="size-3" />端到端加密
+                                </span>
+                            </div>
+                        </div>
+                        <div className="chat-wallpaper space-y-2 px-4 py-5">
+                            <div className="mx-auto w-fit rounded-md bg-white px-2.5 py-1 text-[11px] text-wa-muted shadow-sm dark:bg-[#202c33]">
+                                今天
+                            </div>
+                            <div className="max-w-[75%] rounded-xl rounded-tl-[3px] bg-white p-2.5 text-[13px] text-[#111b21] shadow-sm dark:bg-[#233138] dark:text-[#e9edef]">
+                                你好！这条消息只有我们能读 👋
+                            </div>
+                            <div className="ml-auto max-w-[75%] rounded-xl rounded-tr-[3px] bg-[#d9fdd3] p-2.5 text-[13px] text-[#111b21] shadow-sm dark:bg-[#005c4b] dark:text-[#e9edef]">
+                                没错，密钥只在你我设备之间 <CheckCheck className="ml-1 inline size-3.5 text-[#8ed6bb]" />
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2 border-t border-wa-100 bg-[#f0f2f5] px-3 py-2.5 dark:border-white/10 dark:bg-[#202c33]">
+                            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-full bg-white px-4 py-2 text-[13px] text-wa-muted dark:bg-[#233138]">
+                                <MessageCircle data-icon="inline-start" className="size-4 shrink-0" />输入消息…
+                            </div>
+                            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-[#00a884] text-white">
+                                <SendHorizontal className="size-5" />
+                            </div>
                         </div>
                     </motion.div>
                 </section>
@@ -123,7 +166,7 @@ export default function HomePage() {
                                 transition={{ duration: 0.4, delay: 0.1 + i * 0.08 }}
                             >
                                 <Card className="h-full gap-0">
-                                    <CardContent className="flex flex-col gap-3 p-5">
+                                    <CardContent className="flex flex-col gap-3 border-wa-100 bg-white p-5 dark:border-white/10 dark:bg-[#162229]">
                                         <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
                                             <f.icon className="size-5" data-icon="inline-start" />
                                         </div>
@@ -140,8 +183,8 @@ export default function HomePage() {
             </main>
 
             {/* 底部 */}
-            <footer className="border-t py-6">
-                <div className="mx-auto flex w-full max-w-5xl flex-col items-center justify-between gap-2 px-6 text-xs text-muted-foreground md:flex-row">
+            <footer className="border-t border-wa-100 py-6 dark:border-white/10">
+                <div className="mx-auto flex w-full max-w-5xl flex-col items-center justify-between gap-2 px-6 text-xs text-wa-700 dark:text-wa-100 md:flex-row">
                     <span>© {new Date().getFullYear()} novi · 隐私是基础，而非附加</span>
                     <div className="flex items-center gap-4">
                         <Link to="/about" className="hover:text-foreground hover:underline underline-offset-4">关于</Link>
