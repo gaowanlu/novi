@@ -61,11 +61,15 @@ export interface FriendMessageItem {
     cryptoAckAt?: string | null;
 }
 
-// 各好友未读汇总
+// 各好友未读汇总（content 为密文，iv/wrappedKey/sig 供客户端本地解密出摘要预览）
 export interface UnreadSummary {
     sender: string;
     unreadCount: number;
     content: string;
+    iv?: string | null;
+    wrappedKey?: string | null;
+    wrappedKeySelf?: string | null;
+    sig?: string | null;
     sentAt: string;
     lastMessageID: string;
     noviCode: string;

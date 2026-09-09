@@ -201,8 +201,8 @@ export default function FriendPanel({
                             </AvatarFallback>
                         </Avatar>
                         <div className="flex min-w-0 flex-1 flex-col leading-tight">
-                            <span className="truncate text-sm font-medium text-wa-ink">{user.userName}</span>
-                            <span className="truncate text-[11px] text-wa-muted">
+                            <span className="min-w-0 truncate text-sm font-medium text-wa-ink">{user.userName}</span>
+                            <span className="min-w-0 truncate text-[11px] text-wa-muted" title={user.userId}>
                                 {user.userId}
                             </span>
                         </div>

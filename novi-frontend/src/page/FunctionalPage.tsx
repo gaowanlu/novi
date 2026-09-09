@@ -10,8 +10,10 @@ import { useAuth } from "@/context/AuthContext";
 import type { FriendMessageItem, FriendRequestItem, UnreadSummary, SelectedFriend } from "@/api/types";
 import { toast } from "sonner";
 import { useNoviSocketEvent, type NoviSocketPayload } from "@/ws/noviSocket";
-import { removeFriendKeys } from "@/crypto/keyStore";
+import { removeFriendKeys, getTuple } from "@/crypto/keyStore";
 import { completeTupleFromRequestItem } from "@/crypto/friendKeys";
+import { decryptMessage } from "@/crypto/crypto";
+import { isVaultUnlocked } from "@/crypto/vault";
 
 function FunctionalPage() {
     const [friendList, setFriendList] = useState<FriendRequestItem[]>([]);
@@ -60,6 +62,41 @@ function FunctionalPage() {
         }
     }, [myUserId]);
 
+    // 列表预览用的轻量解密：content 是 AES-GCM 密文（E2E，服务器只存不解密），
+    // 直接渲染就是一串乱码。这里只解出明文做摘要（验签/链校验由 MessagePanel 负责）；
+    // 解不出（vault 未解锁 / 5 元组缺失 / 密钥不匹配）回退「加密消息」占位，绝不显示密文。
+    const previewDecrypt = useCallback(async (
+        senderId: string,
+        nc: string,
+        m: { content: string; iv: string; wrappedKey: string; sig: string }
+    ): Promise<string> => {
+        const FALLBACK = "加密消息";
+        if (!isVaultUnlocked(myUserId)) return FALLBACK;
+        const tuple = getTuple(myUserId, senderId, nc);
+        if (!tuple?.ownPrivateKey?.n) return FALLBACK;
+        // 对方发来：用【自己】私钥解包对方包装的 wrappedKey，验签用对方公钥；
+        // 自己发来（汇总含自己发的）：用【自己】私钥解包自己的 wrappedKeySelf，验签用自己公钥。
+        const isMine = senderId === myUserId;
+        const pub = isMine ? tuple.ownPublicKey : tuple.friendPublicKey;
+        if (!pub?.n) return FALLBACK;
+        try {
+            const r = await decryptMessage({
+                content: m.content,
+                iv: m.iv,
+                wrappedKey: m.wrappedKey,
+                sig: m.sig,
+                preHash: "",
+                ownPrivJwk: tuple.ownPrivateKey,
+                senderPubKeyJwk: pub,
+                expectedPreHash: "",
+                skipPreCheck: true,
+            });
+            return r.status === "ok" && r.text ? r.text : FALLBACK;
+        } catch {
+            return FALLBACK;
+        }
+    }, [myUserId]);
+
     const refreshUnread = useCallback(async () => {
         try {
             const res = await apiFetch(APIMacro.GETMESSAGE_ALLFRIEND, { method: "GET" });
@@ -71,16 +108,25 @@ function FunctionalPage() {
             for (const item of list) {
                 if (!item.sender) continue;
                 counts[item.sender] = item.unreadCount ?? 0;
-                if (item.content && item.sentAt) {
-                    last[item.sender] = { content: item.content, sentAt: item.sentAt };
-                }
+                if (!item.content || !item.sentAt) continue;
+                const nc = item.noviCode || "1";
+                // 对方发来取 wrappedKey；自己发来（汇总含自己发的）取 wrappedKeySelf
+                const isMine = item.sender === myUserId;
+                const wrappedKey = isMine ? (item.wrappedKeySelf ?? "") : (item.wrappedKey ?? "");
+                const preview = await previewDecrypt(item.sender, nc, {
+                    content: item.content,
+                    iv: item.iv ?? "",
+                    wrappedKey,
+                    sig: item.sig ?? "",
+                });
+                last[item.sender] = { content: preview, sentAt: item.sentAt };
             }
             setUnreadMap(counts);
             setLastMessageMap(prev => ({ ...prev, ...last }));
         } catch {
             // 未读汇总失败不影响主流程，静默等待下次轮询
         }
-    }, []);
+    }, [myUserId, previewDecrypt]);
 
     useEffect(() => {
         refreshFriendList();
@@ -97,8 +143,23 @@ function FunctionalPage() {
         refreshFriendList();
         refreshUnread();
 
-        // 属于当前打开的会话 → 追加到气泡列表（去重：自己发出时本地乐观更新已加过）
+        // 好友列表的摘要预览：content 是密文，必须先解密否则列表里是一串乱码。
+        // 与上面的 refreshUnread 同样走本地解密；解不出显示「加密消息」。
+        // 注：refreshUnread 是独立请求、不感知这条 WS 消息，故此处单独更新预览。
         const peerId = m.sender === myUserId ? m.receiver : m.sender;
+        void previewDecrypt(peerId, m.noviCode || "1", {
+            content: m.content,
+            iv: m.iv ?? "",
+            wrappedKey: m.sender === myUserId ? (m.wrappedKeySelf ?? "") : (m.wrappedKey ?? ""),
+            sig: m.sig ?? "",
+        }).then(preview => {
+            setLastMessageMap(prev => ({
+                ...prev,
+                [peerId]: { content: preview, sentAt: m.sentAt ?? prev[peerId]?.sentAt ?? "" }
+            }));
+        });
+
+        // 属于当前打开的会话 → 追加到气泡列表（去重：自己发出时本地乐观更新已加过）
         if (peerId === currentFriendIdRef.current && !seenMessageIdsRef.current.has(m._id)) {
             seenMessageIdsRef.current.add(m._id);
             appendMessageRef.current?.(m);

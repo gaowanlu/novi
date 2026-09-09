@@ -198,6 +198,11 @@ const getMessageAllFriendHandler: RequestHandler = async (req: IRequest, res: Re
                     sender: "$_id",
                     unreadCount: 1, // 未读条数
                     content: "$latestMessage.content",
+                    // 密文配套字段：客户端列表摘要需本地解密出明文预览（服务器只透传，不解密）
+                    iv: { $ifNull: ["$latestMessage.iv", null] },
+                    wrappedKey: { $ifNull: ["$latestMessage.wrappedKey", null] },
+                    wrappedKeySelf: { $ifNull: ["$latestMessage.wrappedKeySelf", null] },
+                    sig: { $ifNull: ["$latestMessage.sig", null] },
                     sentAt: "$latestMessage.sentAt",
                     lastMessageID: "$latestMessage._id",
                     noviCode: "$latestMessage.noviCode",
