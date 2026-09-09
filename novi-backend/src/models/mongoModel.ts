@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import type { Document, Model } from "mongoose";
 import logger from "../logger.js";
+import { redisClient } from "../db/dbRedis.js";
 
 // 用户文档接口
 interface IUser extends Document {
@@ -236,7 +237,21 @@ const MsgSeqCounter: Model<IMsgSeqCounter> = mongoose.model<IMsgSeqCounter>('msg
 // 规范化无序对键：min\0max。A→B 与 B→A 落到同一键，用于 novicode 的唯一约束、计数与 pairKey 回填。
 export const buildPairKey = (a: string, b: string): string => (a < b ? `${a}\0${b}` : `${b}\0${a}`);
 
+// 启动互斥锁：多节点同时启动时只让一个做索引同步 + 回填，避免 N 倍启动写风暴。
+// 锁在 Redis（符合「无内存跨节点状态」不变量）；持有者为 NOVI_NODE，10 分钟 TTL 兜底
+// （进程崩溃未 DEL 时自动过期）。syncIndexes/回填均幂等，跳过者无正确性风险。
+const BOOTSTRAP_LOCK_KEY = 'novi:bootstrap:lock';
+const BOOTSTRAP_LOCK_TTL_SEC = 60 * 10;
+const NOVI_NODE = process.env.NOVI_NODE ?? 'unknown-node';
+
 const onMongoConnected = async (): Promise<void> => {
+    // 1) 抢锁（SET NX）：未抢到说明其它节点正在初始化，跳过本节点的重活。
+    const claimed = await redisClient.set(BOOTSTRAP_LOCK_KEY, NOVI_NODE, { NX: true, EX: BOOTSTRAP_LOCK_TTL_SEC });
+    if (claimed !== 'OK') {
+        logger.info(`onMongoConnected: 其它节点持启动锁（${await redisClient.get(BOOTSTRAP_LOCK_KEY) ?? '?'}），本节点跳过 syncIndexes/回填`);
+        return;
+    }
+
     try {
         await User.syncIndexes();
         await FriendRequest.syncIndexes();
@@ -302,6 +317,16 @@ const onMongoConnected = async (): Promise<void> => {
     } catch (err: unknown) {
         const e = err instanceof Error ? err : new Error(String(err));
         logger.error(`onMongoConnected 失败: ${e.message}`);
+    } finally {
+        // 释放锁：仅当锁仍属于本节点才 DEL（Lua 原子检查+删，避免误删其它节点的锁）。
+        // 失败不致命：EX 10 分钟会让残留锁自动过期，下次启动可重试。
+        try {
+            const script = `if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end`;
+            await redisClient.eval(script, { keys: [BOOTSTRAP_LOCK_KEY], arguments: [NOVI_NODE] });
+        } catch (delErr: unknown) {
+            const de = delErr instanceof Error ? delErr.message : String(delErr);
+            logger.error(`onMongoConnected 释放锁失败（将靠 TTL 过期）: ${de}`);
+        }
     }
 };
 
