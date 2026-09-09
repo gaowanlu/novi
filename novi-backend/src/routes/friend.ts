@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { RequestHandler, Response } from 'express';
 import type { IRequest } from '../comm/request.js';
-import { User, FriendRequest, FriendMessage } from '../models/mongoModel.js';
+import { User, FriendRequest, FriendMessage, buildPairKey } from '../models/mongoModel.js';
 import Joi from 'joi';
 import middlewareValidate from '../middlewares/middlewareValidate.js';
 import middlewareAuth from '../middlewares/middlewareAuth.js';
@@ -54,27 +54,41 @@ const postFriendRequestHandler: RequestHandler = async (
             return
         }
 
-        // 分配关系代次（novicode）：统计双方双向的全部历史记录数 + 1。
+        // 规范化无序对键：A→B 与 B→A 同键，countDocuments 按该键统计双方全部历史代次。
+        const myUserIdStr = myUserId as string;
+        const pairKey = buildPairKey(myUserIdStr, targetUserId);
+
+        // 分配关系代次（novicode）：统计该无序对的全部历史记录数 + 1。
         // 记录只翻转状态、从不硬删 → 计数单调递增：首次添加 = "1"，删除后重新添加 = "2"…
         // 客户端从新鲜 GET 预推导同值；不一致（并发竞态）时客户端按服务器值 relabel 自愈。
-        const novicode = String(
-            (await FriendRequest.countDocuments({
-                $or: [
-                    { requester: myUserId, receiver: targetUserId },
-                    { requester: targetUserId, receiver: myUserId }
-                ]
-            })) + 1
-        );
-
-        // 没有的话就增加一条请求记录（带上发起方公钥与关系代次）
-        const newFriendRequest = new FriendRequest({
-            requester: myUserId,
-            receiver: targetUserId,
-            status: 'pending',
-            publicKey,
-            novicode
-        });
-        const saveNewFriendRequest = await newFriendRequest.save();
+        // 并发兜底：pairKey+novicode 唯一索引（见 mongoModel）拦截跨节点 lost-update，
+        // 撞 E11000 则重读计数重试（好友申请为低频操作，重试风暴可忽略）。
+        const MAX_RETRY = 5;
+        let saveNewFriendRequest: InstanceType<typeof FriendRequest> | null = null;
+        for (let attempt = 0; attempt < MAX_RETRY && !saveNewFriendRequest; attempt++) {
+            const novicode = String(
+                (await FriendRequest.countDocuments({ pairKey })) + 1
+            );
+            try {
+                const newFriendRequest = new FriendRequest({
+                    requester: myUserId,
+                    receiver: targetUserId,
+                    status: 'pending',
+                    publicKey,
+                    novicode,
+                    pairKey
+                });
+                saveNewFriendRequest = await newFriendRequest.save();
+            } catch (saveErr: unknown) {
+                // 唯一索引冲突（E11000）→ 并发竞态，重读计数重试；其它错误直接抛出
+                if (saveErr instanceof Error && (saveErr as { code?: number }).code === 11000) continue;
+                throw saveErr;
+            }
+        }
+        if (!saveNewFriendRequest) {
+            res.status(409).json({ message: '好友关系代次冲突，请重试' });
+            return
+        }
 
         // 新增记录成功了则将好友申请同时推给自己和对方
         if (saveNewFriendRequest) {

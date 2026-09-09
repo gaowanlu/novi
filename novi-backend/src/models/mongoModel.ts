@@ -40,6 +40,7 @@ interface IFriendRequest extends Document {
     publicKey?: string
     receiverPublicKey?: string
     novicode?: string // 关系代次（版本号），服务器分配：好友删除后重新添加 +1
+    pairKey?: string // 规范化无序对（min\0max）
     createdAt: Date
     respondedAt?: Date
     updatedAt: Date
@@ -75,6 +76,10 @@ const friendRequestSchema = new mongoose.Schema<IFriendRequest>(
             type: String,
             default: null
         },
+        pairKey: { // 规范化无序对（min\0max），A→B 与 B→A 同键；用于 novicode 唯一约束
+            type: String,
+            default: null
+        },
         createdAt: { // 请求发出时间
             type: Date,
             default: Date.now,
@@ -89,6 +94,13 @@ const friendRequestSchema = new mongoose.Schema<IFriendRequest>(
 );
 
 friendRequestSchema.index({ requester: 1, receiver: 1 });
+// 唯一约束（partial）：同一无序对在同一代次下唯一。只对 pending/accepted 生效——
+// 已删除/取消/拒绝的历史记录不占位，这样「删除后重新添加」才能拿到下一个 novicode。
+// 解决跨节点并发创建同一好友关系时的 lost-update（两节点都读到 count=N 都写 N+1 → 重复代次）。
+friendRequestSchema.index(
+    { pairKey: 1, novicode: 1 },
+    { unique: true, partialFilterExpression: { status: { $in: ['pending', 'accepted'] } } }
+);
 const FriendRequest: Model<IFriendRequest> = mongoose.model<IFriendRequest>(
     'friendRequest',
     friendRequestSchema
@@ -194,6 +206,40 @@ const FriendMessage: Model<IFriendMessage> = mongoose.model<IFriendMessage>(
     friendMessageSchema
 );
 
+// 规范化无序对键：min\0max。A→B 与 B→A 落到同一键，用于 novicode 的唯一约束与计数。
+export const buildPairKey = (a: string, b: string): string => (a < b ? `${a}\0${b}` : `${b}\0${a}`);
+
+// 存量回填用的 $expr：在 friendRequests 集合内按 _id 规范化出 pairKey，无需应用层逐条读。
+// 仅对「未删」（pending/accepted）记录生成有效键——它们是 novicode 唯一约束作用的活跃记录；
+// 已删/取消/拒绝记录生成空键 ""（无约束意义，不参与唯一性）。
+const backfillPairKeyExpr = {
+    $let: {
+        vars: {
+            a: { $ifNull: [{ $toString: '$requester' }, ''] },
+            b: { $ifNull: [{ $toString: '$receiver' }, ''] }
+        },
+        in: {
+            $cond: {
+                if: {
+                    $and: [
+                        { $ne: ['$status', 'deleted'] },
+                        { $ne: ['$status', 'canceled'] },
+                        { $ne: ['$status', 'rejected'] }
+                    ]
+                },
+                then: {
+                    $cond: {
+                        if: { $lt: ['$$a', '$$b'] },
+                        then: { $concat: ['$$a', '\0', '$$b'] },
+                        else: { $concat: ['$$b', '\0', '$$a'] }
+                    }
+                },
+                else: ""
+            }
+        }
+    }
+};
+
 const onMongoConnected = async (): Promise<void> => {
     try {
         await User.syncIndexes();
@@ -205,6 +251,13 @@ const onMongoConnected = async (): Promise<void> => {
         await FriendRequest.updateMany(
             { $or: [{ novicode: { $exists: false } }, { novicode: null }] },
             { $set: { novicode: "1" } }
+        );
+
+        // 回填存量记录的 pairKey（规范化无序对），供 novicode 唯一约束在已有数据上生效。
+        // 存量代次均为 "1"，同一无序对至多一条活跃记录（pending/accepted），唯一约束安全。
+        await FriendRequest.updateMany(
+            { $or: [{ pairKey: { $exists: false } }, { pairKey: null }] },
+            { $set: { pairKey: backfillPairKeyExpr } }
         );
     } catch (err: unknown) {
         const e = err instanceof Error ? err : new Error(String(err));
