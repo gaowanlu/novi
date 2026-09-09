@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { RequestHandler, Response } from 'express';
 import type { IRequest } from '../comm/request.js';
-import { FriendRequest, FriendMessage } from '../models/mongoModel.js';
+import { FriendRequest, FriendMessage, MsgSeqCounter } from '../models/mongoModel.js';
 import type { IFriendMessage } from '../models/mongoModel.js';
 import Joi from 'joi';
 import middlewareValidate from '../middlewares/middlewareValidate.js';
@@ -53,17 +53,24 @@ const postFriendMessagHandler: RequestHandler = async (req: IRequest, res: Respo
             return
         }
 
-        // 后端分配 seq：读当前 (sender,receiver,noviCode) 最大序号 +1。
-        // 并发下可能撞唯一索引 (sender,receiver,noviCode,seq)，冲突则重读重试。
+        // 后端原子分配 seq：对 (sender,receiver,noviCode) 计数器文档 findOneAndUpdate $inc。
+        // $inc 是单条原子命令，热会话并发下不再「读 max + 1」后撞唯一索引（thundering-herd）。
+        // 计数器文档在启动回填时已建立（seq = 各会话 max）；新会话首次 $inc upsert 时
+        // seq 由 schema default(0) 提供，$inc 后得 1（与旧行为「max(空)+1」一致）。
+        // 注：$inc 与 $setOnInsert 不能作用于同一字段（Mongo 报 ConflictingUpdateOperators），
+        // 故 upsert 时只 $inc，seq 初始值交给 schema default。
+        const counter = await MsgSeqCounter.findOneAndUpdate(
+            { sender: myUserId, receiver, noviCode },
+            { $inc: { seq: 1 } },
+            { upsert: true, new: true }
+        );
+        let nextSeq = counter.seq;
+
+        // 保留唯一索引 (sender,receiver,noviCode,seq) 作最后兜底（理论上不再触发冲突）。
+        // 极小概率下计数器被外部改动导致 E11000，重读计数器重试一次。
         const MAX_RETRY = 5;
         let savedMessage: IFriendMessage | null = null;
         for (let attempt = 0; attempt < MAX_RETRY && !savedMessage; attempt++) {
-            const last = await FriendMessage.findOne(
-                { sender: myUserId, receiver, noviCode },
-                { seq: 1 }
-            ).sort({ seq: -1 }).lean();
-            const nextSeq = (last?.seq ?? 0) + 1;
-
             try {
                 const newFriendMessage = new FriendMessage({
                     noviCode,
@@ -81,8 +88,16 @@ const postFriendMessagHandler: RequestHandler = async (req: IRequest, res: Respo
                 });
                 savedMessage = await newFriendMessage.save();
             } catch (saveErr: unknown) {
-                // 唯一索引冲突（E11000）→ 重试；其它错误直接抛出
-                if (saveErr instanceof Error && (saveErr as { code?: number }).code === 11000) continue;
+                // 唯一索引冲突（E11000）→ 重读计数器重试；其它错误直接抛出
+                if (saveErr instanceof Error && (saveErr as { code?: number }).code === 11000) {
+                    const retryCounter = await MsgSeqCounter.findOneAndUpdate(
+                        { sender: myUserId, receiver, noviCode },
+                        { $inc: { seq: 1 } },
+                        { new: true }
+                    );
+                    if (retryCounter) nextSeq = retryCounter.seq;
+                    continue;
+                }
                 throw saveErr;
             }
         }

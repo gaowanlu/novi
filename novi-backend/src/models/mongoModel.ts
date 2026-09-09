@@ -94,12 +94,15 @@ const friendRequestSchema = new mongoose.Schema<IFriendRequest>(
 );
 
 friendRequestSchema.index({ requester: 1, receiver: 1 });
-// 唯一约束（partial）：同一无序对在同一代次下唯一。只对 pending/accepted 生效——
-// 已删除/取消/拒绝的历史记录不占位，这样「删除后重新添加」才能拿到下一个 novicode。
-// 解决跨节点并发创建同一好友关系时的 lost-update（两节点都读到 count=N 都写 N+1 → 重复代次）。
+// 唯一约束（partial）：同一无序对在同一代次下唯一。partial 过滤双重条件：
+//   1) status ∈ {pending, accepted}：已删除/取消/拒绝的历史记录不占位，
+//      这样「删除后重新添加」才能拿到下一个 novicode；
+//   2) pairKey 是 string（$type）：排除 pairKey=null/缺失的存量记录——它们不参与唯一性，
+//      否则多节点 syncIndexes 在「同对多条存量记录都 pairKey=null」时建索引会撞 E11000。
+// 该约束拦截跨节点并发创建同一好友关系时的 lost-update（两节点都读到 count=N 都写 N+1 → 重复代次）。
 friendRequestSchema.index(
     { pairKey: 1, novicode: 1 },
-    { unique: true, partialFilterExpression: { status: { $in: ['pending', 'accepted'] } } }
+    { unique: true, partialFilterExpression: { status: { $in: ['pending', 'accepted'] }, pairKey: { $type: 'string' } } }
 );
 const FriendRequest: Model<IFriendRequest> = mongoose.model<IFriendRequest>(
     'friendRequest',
@@ -206,64 +209,101 @@ const FriendMessage: Model<IFriendMessage> = mongoose.model<IFriendMessage>(
     friendMessageSchema
 );
 
-// 规范化无序对键：min\0max。A→B 与 B→A 落到同一键，用于 novicode 的唯一约束与计数。
-export const buildPairKey = (a: string, b: string): string => (a < b ? `${a}\0${b}` : `${b}\0${a}`);
+// 消息序号计数器文档接口
+interface IMsgSeqCounter extends Document {
+    sender: mongoose.Types.ObjectId
+    receiver: mongoose.Types.ObjectId
+    noviCode: string
+    seq: number
+    updatedAt: Date
+}
 
-// 存量回填用的 $expr：在 friendRequests 集合内按 _id 规范化出 pairKey，无需应用层逐条读。
-// 仅对「未删」（pending/accepted）记录生成有效键——它们是 novicode 唯一约束作用的活跃记录；
-// 已删/取消/拒绝记录生成空键 ""（无约束意义，不参与唯一性）。
-const backfillPairKeyExpr = {
-    $let: {
-        vars: {
-            a: { $ifNull: [{ $toString: '$requester' }, ''] },
-            b: { $ifNull: [{ $toString: '$receiver' }, ''] }
-        },
-        in: {
-            $cond: {
-                if: {
-                    $and: [
-                        { $ne: ['$status', 'deleted'] },
-                        { $ne: ['$status', 'canceled'] },
-                        { $ne: ['$status', 'rejected'] }
-                    ]
-                },
-                then: {
-                    $cond: {
-                        if: { $lt: ['$$a', '$$b'] },
-                        then: { $concat: ['$$a', '\0', '$$b'] },
-                        else: { $concat: ['$$b', '\0', '$$a'] }
-                    }
-                },
-                else: ""
-            }
-        }
-    }
-};
+// 消息序号计数器集合 Schema：每 (sender, receiver, noviCode) 一个计数器。
+// 用 findOneAndUpdate $inc 原子分配 seq，替代「读 max + 1」的读后写（热会话并发下会 thundering-herd 撞唯一索引）。
+// 与消息唯一索引 {sender,receiver,noviCode,seq} 配合：$inc 保证不冲突，唯一索引作最后兜底。
+const msgSeqCounterSchema = new mongoose.Schema<IMsgSeqCounter>(
+    {
+        sender: { type: mongoose.Schema.Types.ObjectId, ref: 'user', required: true },
+        receiver: { type: mongoose.Schema.Types.ObjectId, ref: 'user', required: true },
+        noviCode: { type: String, required: true },
+        seq: { type: Number, default: 0 },
+    },
+    { timestamps: true }
+);
+msgSeqCounterSchema.index({ sender: 1, receiver: 1, noviCode: 1 }, { unique: true });
+const MsgSeqCounter: Model<IMsgSeqCounter> = mongoose.model<IMsgSeqCounter>('msgSeqCounter', msgSeqCounterSchema);
+
+// 规范化无序对键：min\0max。A→B 与 B→A 落到同一键，用于 novicode 的唯一约束、计数与 pairKey 回填。
+export const buildPairKey = (a: string, b: string): string => (a < b ? `${a}\0${b}` : `${b}\0${a}`);
 
 const onMongoConnected = async (): Promise<void> => {
     try {
         await User.syncIndexes();
         await FriendRequest.syncIndexes();
         await FriendMessage.syncIndexes();
+        await MsgSeqCounter.syncIndexes();
 
-        // 回填存量好友申请记录的关系代次（修复前文档无该字段、改 schema 后新文档默认 null）：
-        // 存量记录统一视为第 "1" 代，与客户端 DEFAULT_NOVI_CODE 一致
-        await FriendRequest.updateMany(
+        // 回填走原生 collection 的 find/updateMany/bulkWrite，不用 aggregate + $merge：
+        // node driver 在当前环境下 $merge 行为异常（不写入目标集合），改用显式 find + 批量写更稳。
+        // 幂等：novicode/pairKey 用 $set 固定值或 buildPairKey，重复跑收敛到同一结果。
+        const frColl = FriendRequest.collection;
+
+        // 1) 回填关系代次：存量（修复前）记录无 novicode，统一视为第 "1" 代（= 客户端 DEFAULT_NOVI_CODE）。
+        await frColl.updateMany(
             { $or: [{ novicode: { $exists: false } }, { novicode: null }] },
             { $set: { novicode: "1" } }
         );
 
-        // 回填存量记录的 pairKey（规范化无序对），供 novicode 唯一约束在已有数据上生效。
-        // 存量代次均为 "1"，同一无序对至多一条活跃记录（pending/accepted），唯一约束安全。
-        await FriendRequest.updateMany(
-            { $or: [{ pairKey: { $exists: false } }, { pairKey: null }] },
-            { $set: { pairKey: backfillPairKeyExpr } }
-        );
+        // 2) 回填 pairKey（规范化无序对，供 novicode 唯一约束在已有数据上生效）。
+        //    逐条 buildPairKey（应用层）后 bulkWrite upsert；独立 try，撞唯一索引也不影响其它回填。
+        try {
+            const nullPairDocs = await frColl.find(
+                { $or: [{ pairKey: { $exists: false } }, { pairKey: null }] },
+                { projection: { _id: 1, requester: 1, receiver: 1 } }
+            ).toArray();
+            if (nullPairDocs.length > 0) {
+                const ops = nullPairDocs.map((d: any) => ({
+                    updateOne: {
+                        filter: { _id: d._id },
+                        update: { $set: { pairKey: buildPairKey(d.requester.toString(), d.receiver.toString()) } },
+                        upsert: false,
+                    },
+                }));
+                await frColl.bulkWrite(ops, { ordered: false });
+            }
+        } catch (pairErr: unknown) {
+            const pe = pairErr instanceof Error ? pairErr.message : String(pairErr);
+            logger.error(`pairKey 回填失败（不影响 novicode/seq）: ${pe}`);
+        }
+
+        // 3) 回填消息会话序号计数器：每个 (sender,receiver,noviCode) 取各会话最大 seq。
+        //    find 出有 seq 的消息 → 按会话归并取 max → bulkWrite upsert 到 msgSeqCounter。
+        //    幂等：每次启动重算各会话真实 max，收敛到正确水位。
+        const msgDocs = await FriendMessage.collection
+            .find({ seq: { $type: 'number' } }, { projection: { sender: 1, receiver: 1, noviCode: 1, seq: 1 } })
+            .toArray();
+        if (msgDocs.length > 0) {
+            const byConv = new Map<string, { sender: string; receiver: string; noviCode: string; seq: number }>();
+            for (const m of msgDocs) {
+                const key = `${m.sender}\u0000${m.receiver}\u0000${m.noviCode}`;
+                const cur = byConv.get(key);
+                if (!cur) byConv.set(key, { sender: m.sender.toString(), receiver: m.receiver.toString(), noviCode: m.noviCode, seq: m.seq });
+                else if (m.seq > cur.seq) cur.seq = m.seq;
+            }
+            const ops = Array.from(byConv.values()).map((c) => ({
+                updateOne: {
+                    filter: { sender: c.sender, receiver: c.receiver, noviCode: c.noviCode },
+                    update: { $set: { sender: c.sender, receiver: c.receiver, noviCode: c.noviCode, seq: c.seq } },
+                    upsert: true,
+                },
+            }));
+            await MsgSeqCounter.collection.bulkWrite(ops, { ordered: false });
+        }
     } catch (err: unknown) {
         const e = err instanceof Error ? err : new Error(String(err));
         logger.error(`onMongoConnected 失败: ${e.message}`);
     }
 };
 
-export { User, FriendRequest, FriendMessage, onMongoConnected };
-export type { IUser, IFriendRequest, IFriendMessage };
+export { User, FriendRequest, FriendMessage, MsgSeqCounter, onMongoConnected };
+export type { IUser, IFriendRequest, IFriendMessage, IMsgSeqCounter };
