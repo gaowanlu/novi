@@ -13,6 +13,9 @@
  *    响应带回双方公钥（requesterPublicKey=A, receiverPublicKey=B），双方各自补齐 5 元组。
  *  - 收到 WS 推送（novi_friend_request_processed / comming）时，若 payload 含公钥且本地缺，
  *    则用 mergeFriendPublicKey 补齐。
+ *
+ * 注意：saveTuple / mergeFriendPublicKey 现为 async（需 vault 加密私钥）。
+ * 所有调用方必须 await。
  */
 import { generateRsaKeyPair, jwkToB64, b64ToJwk } from "./crypto.js";
 import {
@@ -40,15 +43,14 @@ export async function ensureOwnKeys(
     novicode: string = DEFAULT_NOVI_CODE
 ): Promise<string> {
     const existing = getTuple(myId, friendId, novicode);
-    if (existing) return jwkToB64(existing.ownPublicKey);
+    if (existing && existing.ownPublicKey.n) return jwkToB64(existing.ownPublicKey);
 
     const pair = await generateRsaKeyPair();
-    saveTuple(myId, {
+    await saveTuple(myId, {
         friendId,
         novicode,
         ownPrivateKey: pair.privateKeyJwk,
         ownPublicKey: pair.publicKeyJwk,
-        // friendPublicKey 占位，待对方公钥到达后 merge 进来
         friendPublicKey: {} as JsonWebKey,
     });
     return jwkToB64(pair.publicKeyJwk);
@@ -59,17 +61,17 @@ export async function ensureOwnKeys(
  * 链头只在「本次刚补齐」（此前缺对方公钥）时初始化为创世值；若 5 元组早已完整
  * （可能已发过消息、链头已推进），绝不重置，防止迟到的重复推送把链头打回创世。
  */
-export function finalizeAsRequester(
+export async function finalizeAsRequester(
     myId: string,
     friendId: string,
     friendPublicKeyB64: string,
     novicode: string = DEFAULT_NOVI_CODE
-): void {
+): Promise<void> {
     if (!friendPublicKeyB64) return;
     const own = getTuple(myId, friendId, novicode);
-    if (!own) return; // 本端没有密钥（异常）
+    if (!own) return;
     const hadFriendKey = Boolean(own.friendPublicKey?.n);
-    const updated = mergeFriendPublicKey(
+    const updated = await mergeFriendPublicKey(
         myId, friendId, novicode,
         b64ToJwk(friendPublicKeyB64),
         own.ownPrivateKey, own.ownPublicKey
@@ -83,9 +85,9 @@ export function finalizeAsRequester(
  */
 export interface RequestItemLike {
     status?: string;
-    publicKey?: string | null;          // 发起方(A)公钥（申请时已存）
-    receiverPublicKey?: string | null;  // 接收方(B)公钥（接受时落库）
-    novicode?: string | null;           // 关系代次（版本号），服务器分配
+    publicKey?: string | null;
+    receiverPublicKey?: string | null;
+    novicode?: string | null;
     requester?: { userId?: string | null } | string | null;
     receiver?: { userId?: string | null } | string | null;
 }
@@ -99,19 +101,17 @@ const idOf = (v: { userId?: string | null } | string | null | undefined): string
  * A 上线拉列表 → 用 receiverPublicKey 补齐，友谊链从创世值开始。
  * 幂等：isReady 则直接跳过（绝不触碰已推进的链头）。
  */
-export function completeTupleFromRequestItem(myId: string, item: RequestItemLike): void {
+export async function completeTupleFromRequestItem(myId: string, item: RequestItemLike): Promise<void> {
     if (!item || item.status !== 'accepted') return;
     const reqId = idOf(item.requester);
     const recvId = idOf(item.receiver);
     if (!reqId || !recvId || (myId !== reqId && myId !== recvId)) return;
     const otherId = myId === reqId ? recvId : reqId;
-    // 解析当前代次：记录 novicode（服务器权威）> 本地已有代次 > "1"
     const novicode = resolveCurrentNovicode(myId, otherId, item.novicode ?? null);
     if (isReady(myId, otherId, novicode)) return;
-    // 我是发起方 → 需要接收方公钥；我是接收方 → 需要发起方公钥
     const neededPub = myId === reqId ? item.receiverPublicKey : item.publicKey;
     if (!neededPub) return;
-    finalizeAsRequester(myId, otherId, neededPub, novicode);
+    await finalizeAsRequester(myId, otherId, neededPub, novicode);
 }
 
 /**
@@ -139,17 +139,16 @@ export function resolveCurrentNovicode(
  * 场景：客户端预推导的代次与服务器分配不一致（并发竞态）→ 以服务器值为准。
  * 幂等：目标代次已有元组则保留既有、只清理旧代次。
  */
-export function relabelNovicode(
+export async function relabelNovicode(
     myId: string, friendId: string, fromNovicode: string, toNovicode: string
-): void {
+): Promise<void> {
     if (fromNovicode === toNovicode) return;
     const t = getTuple(myId, friendId, fromNovicode);
-    if (!t) return; // 旧代次无元组（已重贴过或缺失）
+    if (!t) return;
     if (!getTuple(myId, friendId, toNovicode)) {
-        saveTuple(myId, { ...t, novicode: toNovicode }); // 5 元组重贴到新代次
+        await saveTuple(myId, { ...t, novicode: toNovicode });
     }
-    deleteTuple(myId, friendId, fromNovicode); // 必须删旧代次，否则重复元组会让 max 解析选错
-    // 链头迁移（仅当新代次尚未推进，避免回退）
+    await deleteTuple(myId, friendId, fromNovicode);
     const fromHead = getChainHead(myId, friendId, fromNovicode);
     if (fromHead !== GENESIS_PRE_HASH && getChainHead(myId, friendId, toNovicode) === GENESIS_PRE_HASH) {
         setChainHead(myId, friendId, toNovicode, fromHead);
@@ -168,14 +167,11 @@ export async function finalizeAsReceiver(
     requesterPublicKeyB64: string | null,
     novicode: string = DEFAULT_NOVI_CODE
 ): Promise<string> {
-    // 记录调用前是否已有 5 元组：链头只在「首次建立」时初始化，
-    // 避免重复调用把已推进的链头打回创世值。
     const existedBefore = Boolean(getTuple(myId, friendId, novicode));
     const ownPubB64 = await ensureOwnKeys(myId, friendId, novicode);
-    // 把 A 的公钥 merge 进来
     if (requesterPublicKeyB64) {
         const own = getTuple(myId, friendId, novicode)!;
-        mergeFriendPublicKey(
+        await mergeFriendPublicKey(
             myId, friendId, novicode,
             b64ToJwk(requesterPublicKeyB64),
             own.ownPrivateKey, own.ownPublicKey
@@ -185,7 +181,7 @@ export async function finalizeAsReceiver(
     return ownPubB64;
 }
 
-/** 检查某好友某版本是否已具备完整 5 元组（双方公钥都在） */
+/** 检查某好友某版本是否已具备完整 5 元组（双方公钥 + 本端私钥都在） */
 export function isReady(myId: string, friendId: string, novicode: string = DEFAULT_NOVI_CODE): boolean {
     const t = getTuple(myId, friendId, novicode);
     return Boolean(

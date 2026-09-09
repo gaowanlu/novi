@@ -49,7 +49,7 @@ function FunctionalPage() {
             setFriendList(list);
             // 离线补齐：我离线期间对方接受了申请（错过 WS 推送），用列表里的公钥补齐 5 元组，
             // 进入聊天即可加密（幂等；好友关系完整时绝不触碰已推进的链头）
-            for (const item of list) completeTupleFromRequestItem(myUserId, item);
+            for (const item of list) await completeTupleFromRequestItem(myUserId, item);
             // 默认选中第一个好友
             setCurrentFriend(prev => {
                 if (prev) return prev;
@@ -132,7 +132,7 @@ function FunctionalPage() {
         const p = payload as { requester?: string | null; receiver?: string | null };
         const other = p?.requester === myUserId ? p.receiver : p.requester;
         if (other) {
-            removeFriendKeys(myUserId, other);
+            void removeFriendKeys(myUserId, other);
             // 被删好友正是当前打开的会话 → 清空选择（重新添加是新代次，需重新进入加载）
             if (other === currentFriendIdRef.current) setCurrentFriend(null);
         }

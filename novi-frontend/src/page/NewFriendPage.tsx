@@ -116,7 +116,7 @@ export default function NewFriendPage() {
             if (res.ok) {
                 // 自愈：服务器分配的代次为准，不一致则重贴本地元组/链头
                 const serverNovi = (data as { novicode?: string | null })?.novicode;
-                if (serverNovi && serverNovi !== novicode) relabelNovicode(user.userId, _id, novicode, serverNovi);
+                if (serverNovi && serverNovi !== novicode) await relabelNovicode(user.userId, _id, novicode, serverNovi);
                 toast.success('申请已发送');
                 refreshRequests();
             } else {
@@ -142,7 +142,7 @@ export default function NewFriendPage() {
                 });
                 setRequests(list);
                 // 离线补齐：申请期间离线、对方已接受的记录，用列表里的公钥补齐 5 元组（幂等）
-                for (const item of list) completeTupleFromRequestItem(user.userId, item);
+                for (const item of list) await completeTupleFromRequestItem(user.userId, item);
             }
         } catch { /* 静默 */ }
         finally {
@@ -168,7 +168,7 @@ export default function NewFriendPage() {
                 // 双保险：用响应里的双方公钥再补齐一次 5 元组（推送可能先到/未到）
                 if (status === 'accepted') {
                     const otherId = user.userId === item.receiver.userId ? item.requester.userId! : item.receiver.userId!;
-                    finalizeAsReceiver(
+                    await finalizeAsReceiver(
                         user.userId, otherId,
                         data?.requesterPublicKey ?? item.publicKey ?? null,
                         (data as { novicode?: string | null })?.novicode ?? item.novicode ?? DEFAULT_NOVI_CODE
@@ -205,7 +205,7 @@ export default function NewFriendPage() {
             const data = await res.json();
             if (res.ok) {
                 // 删除好友：清理本地与该好友的全部代次密钥与链头（尽量无痕；重新添加会协商新代次）
-                removeFriendKeys(user.userId, targetUserId);
+                await removeFriendKeys(user.userId, targetUserId);
                 refreshRequests();
             } else toast.error(data.message);
         } catch (err: any) {
@@ -236,14 +236,14 @@ export default function NewFriendPage() {
             const isRequester = p.requester === user.userId;
             const friendId = isRequester ? p.receiver : p.requester;
             const friendPub = isRequester ? p.receiverPublicKey : p.requesterPublicKey;
-            if (friendId && friendPub) finalizeAsRequester(user.userId, friendId, friendPub, p.novicode ?? DEFAULT_NOVI_CODE);
+            if (friendId && friendPub) void finalizeAsRequester(user.userId, friendId, friendPub, p.novicode ?? DEFAULT_NOVI_CODE);
         }
     });
     useNoviSocketEvent("novi_friend_friend_deleted", (payload) => {
         // 好友被删除：清理本地与该好友的密钥（尽量无痕；重新添加会协商新代次密钥）
         const p = payload as { requester?: string | null; receiver?: string | null };
         const other = p?.requester === user.userId ? p.receiver : p.requester;
-        if (other) removeFriendKeys(user.userId, other);
+        if (other) void removeFriendKeys(user.userId, other);
         refreshRequests();
     });
 

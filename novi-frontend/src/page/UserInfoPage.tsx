@@ -8,6 +8,7 @@ import {
     Download,
     Upload,
     ShieldCheck,
+    KeyRound,
     ChevronRight,
     Trash2,
 } from 'lucide-react';
@@ -16,9 +17,11 @@ import { Link } from 'react-router-dom';
 import { APIMacro } from '../api/APIMacro';
 import { apiFetch } from '../api/request';
 import { useAuth, useSessionUser } from '../context/AuthContext';
+import { useVault } from '../context/VaultContext';
 import { PageShell } from '@/components/PageShell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
     AlertDialog,
@@ -40,7 +43,14 @@ function UserInfoPage() {
     const importFileRef = useRef<HTMLInputElement>(null);
 
     const { updateEmailAndUserName } = useAuth();
+    const { status: vaultStatus, hasPassword, changePassword, lock } = useVault();
     const user = useSessionUser();
+
+    const [changePwOpen, setChangePwOpen] = useState(false);
+    const [oldPw, setOldPw] = useState('');
+    const [newPw, setNewPw] = useState('');
+    const [confirmPw, setConfirmPw] = useState('');
+    const [pwBusy, setPwBusy] = useState(false);
 
     const handleImportKeys = () => importFileRef.current?.click();
 
@@ -48,6 +58,35 @@ function UserInfoPage() {
         clearKeys(user.userId);
         setClearOpen(false);
         toast.success('本地密钥已清空', { description: '与该好友的历史消息将无法解密' });
+    };
+
+    const handleLockVault = () => {
+        lock();
+        toast.success('保险箱已锁定');
+    };
+
+    const handleChangePw = async () => {
+        if (newPw.length < 8) {
+            toast.error('新密码至少 8 个字符');
+            return;
+        }
+        if (newPw !== confirmPw) {
+            toast.error('两次输入的新密码不一致');
+            return;
+        }
+        setPwBusy(true);
+        try {
+            await changePassword(oldPw, newPw);
+            setChangePwOpen(false);
+            setOldPw('');
+            setNewPw('');
+            setConfirmPw('');
+            toast.success('保险箱密码已更新');
+        } catch (err: any) {
+            toast.error(err?.message || '修改失败');
+        } finally {
+            setPwBusy(false);
+        }
     };
 
     const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -60,7 +99,7 @@ function UserInfoPage() {
                 toast.error('备份不属于当前账号', { description: '请导入你自己导出的密钥文件' });
                 return;
             }
-            importKeysBackup(bundle);
+            await importKeysBackup(bundle);
             toast.success('密钥已导入', { description: '历史消息现在可重新解密' });
         } catch (err: any) {
             toast.error('导入失败', { description: err?.message || '文件格式不正确' });
@@ -168,8 +207,10 @@ function UserInfoPage() {
                     </Button>
                 </form>
 
-                {/* 端到端加密密钥 */}
-                <div className="mt-6 flex flex-col gap-1">
+                {vaultStatus !== 'none' && (
+                    <>
+                    {/* 端到端加密密钥 */}
+                    <div className="mt-6 flex flex-col gap-1">
                     <div className="flex items-center gap-2 pb-1">
                         <ShieldCheck className="size-4 text-muted-foreground" />
                         <span className="text-xs font-medium text-muted-foreground">端到端加密密钥</span>
@@ -177,7 +218,7 @@ function UserInfoPage() {
 
                     <button
                         type="button"
-                        onClick={() => { downloadKeysBackup(user.userId); toast.success('密钥已导出'); }}
+                        onClick={async () => { await downloadKeysBackup(user.userId); toast.success('密钥已导出'); }}
                         className="flex items-center gap-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-3 text-left transition-colors hover:bg-accent/60 focus-visible:ring-ring/40 focus-visible:ring-[3px] focus-visible:border-ring outline-none"
                     >
                         <Download data-icon="inline-start" className="size-5 shrink-0 text-muted-foreground" />
@@ -234,6 +275,102 @@ function UserInfoPage() {
                         请定期导出备份并妥善保管（备份文件含私钥，切勿分享给他人）。
                     </p>
                 </div>
+
+                {/* 保险箱密码 */}
+                <div className="mt-6 flex flex-col gap-1">
+                    <div className="flex items-center gap-2 pb-1">
+                        <KeyRound className="size-4 text-muted-foreground" />
+                        <span className="text-xs font-medium text-muted-foreground">保险箱密码</span>
+                        <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                            vaultStatus === 'unlocked' || !hasPassword
+                                ? 'bg-primary/10 text-primary'
+                                : 'bg-muted text-muted-foreground'
+                        }`}>
+                            {vaultStatus === 'unlocked' || !hasPassword ? '已解锁' : '已锁定'}
+                        </span>
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={() => setChangePwOpen(true)}
+                        disabled={vaultStatus !== 'unlocked'}
+                        className="flex items-center gap-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-3 text-left transition-colors hover:bg-accent/60 focus-visible:ring-ring/40 focus-visible:ring-[3px] focus-visible:border-ring outline-none disabled:opacity-50 disabled:pointer-events-none"
+                    >
+                        <KeyRound data-icon="inline-start" className="size-5 shrink-0 text-muted-foreground" />
+                        <span className="flex-1 text-sm">修改保险箱密码</span>
+                        <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                    </button>
+
+                    <div className="h-px bg-border/60" />
+
+                    <button
+                        type="button"
+                        onClick={handleLockVault}
+                        disabled={vaultStatus !== 'unlocked'}
+                        className="flex items-center gap-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-3 text-left transition-colors hover:bg-accent/60 focus-visible:ring-ring/40 focus-visible:ring-[3px] focus-visible:border-ring outline-none disabled:opacity-50 disabled:pointer-events-none"
+                    >
+                        <ShieldCheck data-icon="inline-start" className="size-5 shrink-0 text-muted-foreground" />
+                        <span className="flex-1 text-sm">锁定保险箱</span>
+                        <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                    </button>
+
+                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                        {hasPassword
+                            ? '保险箱密码用于在本浏览器内加密私钥。锁定或刷新页面后需重新输入密码才能使用密钥。密码不会上传到服务器，遗忘后无法恢复。'
+                            : '当前未设置保险箱密码：私钥仅在本浏览器内加密保存，刷新后无需再输密码，但换浏览器/设备将无法解密。建议设置密码以便跨设备迁移。'}
+                    </p>
+                    </div>
+
+                    {/* 修改密码对话框 */}
+                    <AlertDialog open={changePwOpen} onOpenChange={setChangePwOpen}>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>修改保险箱密码</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    请输入当前密码和新密码。新密码将重新加密所有私钥。
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <div className="flex flex-col gap-3 py-2">
+                                <div className="flex flex-col gap-1.5">
+                                    <Label htmlFor="vault-old-pw">当前密码</Label>
+                                    <Input
+                                        id="vault-old-pw"
+                                        type="password"
+                                        value={oldPw}
+                                        onChange={e => setOldPw(e.target.value)}
+                                        autoFocus
+                                    />
+                                </div>
+                                <div className="flex flex-col gap-1.5">
+                                    <Label htmlFor="vault-new-pw">新密码（至少 8 位）</Label>
+                                    <Input
+                                        id="vault-new-pw"
+                                        type="password"
+                                        value={newPw}
+                                        onChange={e => setNewPw(e.target.value)}
+                                    />
+                                </div>
+                                <div className="flex flex-col gap-1.5">
+                                    <Label htmlFor="vault-confirm-pw">确认新密码</Label>
+                                    <Input
+                                        id="vault-confirm-pw"
+                                        type="password"
+                                        value={confirmPw}
+                                        onChange={e => setConfirmPw(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>取消</AlertDialogCancel>
+                                <Button onClick={handleChangePw} disabled={pwBusy}>
+                                    {pwBusy && <Loader2 data-icon="inline-start" className="animate-spin" />}
+                                    {pwBusy ? '加密中…' : '确认修改'}
+                                </Button>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                    </>
+                )}
 
                 {/* 底部 */}
                 <div className="mt-6 flex items-center justify-center gap-2 text-muted-foreground">
