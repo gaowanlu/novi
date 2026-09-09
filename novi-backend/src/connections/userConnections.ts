@@ -1,5 +1,4 @@
 import { Server, Socket } from 'socket.io'
-import type { ServerOptions } from 'socket.io'
 import type { Server as HttpServer } from 'http'
 import logger from '../logger.js';
 import { redisClient } from "../db/dbRedis.js";

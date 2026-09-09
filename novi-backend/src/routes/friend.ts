@@ -273,7 +273,7 @@ const putFriendRequestHandler: RequestHandler = async (
         // 好友申请状态更新后马上通知给自己和对方（带双方公钥，离线方上线拉取也能拿到）
         if (friendRequestByIdUpdated) {
             try {
-                const pushPayload: Record<string, any> = {
+                const pushPayload: Record<string, unknown> = {
                     _id: friendRequestByIdUpdated._id,
                     requester: friendRequestByIdUpdated.requester,
                     receiver: friendRequestByIdUpdated.receiver,

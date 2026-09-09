@@ -150,6 +150,9 @@ const getMessageAllFriendHandler: RequestHandler = async (req: IRequest, res: Re
                                 ]
                             }
                         },
+                        // 同一对好友可能存在多条 accepted 记录（如删除后重新添加），显式取最新一条，
+                        // 保证代次隔离取到的是「当前」代次，避免 $limit 隐式顺序导致的偶发误判
+                        { $sort: { createdAt: -1 } },
                         { $limit: 1 },
                         { $project: { _id: 0, novicode: 1 } }
                     ],
