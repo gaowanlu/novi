@@ -349,7 +349,9 @@ router.get('/pull/unread/byfriend',
 // 提供一个数组提交消息ID用于确认消息消息已读
 // PUT message/markreaded
 const markMessageReadedScheme = Joi.object({
-    messageIds: Joi.array().items(Joi.string().length(24)).min(1).required()
+    // .max(200)：单次批量上限，防无界 $in + 无界推送扇出（DoS 面）。
+    // 与前端「每次拉 30 条」对齐；超限返回 400，客户端应分批提交。
+    messageIds: Joi.array().items(Joi.string().length(24)).min(1).max(200).required()
 });
 
 const putMessageMarkreadedHandler = async (req: IRequest, res: Response): Promise<void> => {
@@ -411,7 +413,8 @@ router.put('/markreaded',
 // 接收者确认消息解密成功
 // PUT message/crypto/ack
 const messageCryptoAckScheme = Joi.object({
-    messageIds: Joi.array().items(Joi.string().length(24)).min(1).required()
+    // .max(200)：单次批量上限，防无界 $in + 无界推送扇出（DoS 面）。
+    messageIds: Joi.array().items(Joi.string().length(24)).min(1).max(200).required()
 });
 const putMessageCryptoAckHandler = async (req: IRequest, res: Response): Promise<void> => {
     try {
