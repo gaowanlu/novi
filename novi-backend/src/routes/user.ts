@@ -1,9 +1,10 @@
 import { Router } from 'express'
 import type { RequestHandler, Response } from 'express'
 import type { IRequest } from '../comm/request.js';
-import { User } from '../models/mongoModel.js';
+import { User, FriendRequest } from '../models/mongoModel.js';
 import Joi from 'joi';
 import middlewareValidate from '../middlewares/middlewareValidate.js';
+import middlewareAuth from '../middlewares/middlewareAuth.js';
 import logger from '../logger.js';
 import crypto from 'crypto'
 
@@ -58,11 +59,26 @@ router.post('/',
     middlewareValidate(postUserSchema),
     postUserHandler);
 
-// GET user/getAll
+// GET user/getAll 需要登录。仅返回「与我相关」的用户（好友/好友请求中出现的对方），
+// 不再全量返回，避免越权枚举全体用户。
 router.get('/getAll',
+    middlewareAuth,
     async (req: IRequest, res: Response): Promise<void> => {
+        const myUserId = req.noviUser?._id as string;
         try {
-            const users = await User.find().select('_id userName');
+            // 取好友申请中「我」对端的用户ID（requester/receiver 中不等于我的一侧），含各状态历史
+            const relatedIds = await FriendRequest.distinct(
+                '$requester',
+                { receiver: myUserId }
+            );
+            const relatedIds2 = await FriendRequest.distinct(
+                '$receiver',
+                { requester: myUserId }
+            );
+            const ids = [...new Set([...relatedIds, ...relatedIds2])].filter((id: any) => String(id) !== myUserId);
+            const users = ids.length
+                ? await User.find({ _id: { $in: ids } }).select('_id userName')
+                : [];
             res.status(200).json(users);
         } catch (err: any) {
             logger.error(`${err.message}`);
@@ -101,6 +117,7 @@ const postUserFindHandler: RequestHandler = async (req: IRequest, res: Response)
     }
 };
 router.post('/find',
+    middlewareAuth,
     middlewareValidate(postUserFindSchema),
     postUserFindHandler);
 
@@ -118,18 +135,24 @@ const postUserDeleteSchema = Joi.object({
     return value;
 });
 router.post('/delete',
+    middlewareAuth,
     middlewareValidate(postUserDeleteSchema),
     async (req: IRequest, res: Response): Promise<void> => {
         try {
             const { userName, email, _id } = req.body;
-            const users = await User.find({ $or: [{ userName }, { email }, { _id }] }).select('_id userName email');
+            // 仅允许删除「自己」：匹配条件必须命中当前登录用户，否则会越权删除他人账号
+            const myUserId = req.noviUser?._id;
+            const selfMatch: any = { $or: [{ userName }, { email }, { _id }] };
+            selfMatch._id = myUserId; // 强制限定到当前用户
+
+            const users = await User.find(selfMatch).select('_id userName email');
 
             if (users.length === 0) {
                 res.status(404).json({ message: '未找到指定的用户' });
                 return
             }
 
-            await User.deleteMany({ $or: [{ userName }, { email }, { _id }] });
+            await User.deleteOne(selfMatch);
             res.status(200).json(users);
         } catch (err: any) {
             logger.error(`${err.message}`);
@@ -144,13 +167,22 @@ const putUserSchema = Joi.object({
     userName: Joi.string().trim().min(3).max(20).required(),
     email: Joi.string().trim().email().required()
 });
-router.put('/', middlewareValidate(putUserSchema),
+router.put('/',
+    middlewareAuth,
+    middlewareValidate(putUserSchema),
     async (req: IRequest, res: Response): Promise<void> => {
         try {
             const { userName, email, _id } = req.body;
 
+            // 仅允许修改「自己」：_id 必须等于当前登录用户，且二者需一致，否则会越权改他人资料
+            const myUserId = req.noviUser?._id;
+            if (String(_id) !== String(myUserId)) {
+                res.status(403).json({ message: '不能修改其他用户的资料' });
+                return
+            }
+
             const updatedUser = await User.findOneAndUpdate(
-                { _id },
+                { _id: myUserId },
                 { $set: { userName, email } },
                 { new: true, upsert: false } // new:false 返回当前旧的数据 true 返回新的
             ).select('_id userName email'); // upsert 没有则不要进行插入

@@ -6,9 +6,10 @@ import type { Response, NextFunction } from 'express'
 import type { IRequest } from './comm/request.js'
 
 import { middlewareLogger } from './middlewares/middlewareLogger.js'
-import { connectMongo } from './db/dbMongo.js'
+import { connectMongo, disconnectMongo } from './db/dbMongo.js'
 import { connectPostgres } from './db/dbPostgres.js'
-import { connectRedis } from './db/dbRedis.js'
+import { connectRedis, disconnectRedis } from './db/dbRedis.js'
+import { pgPool } from './db/dbPostgres.js'
 
 import userRouter from './routes/user.js'
 import orderRouter from './routes/order.js'
@@ -72,9 +73,57 @@ async function startServer() {
 
     noviNodeIPC.init();
 
+    setupGracefulShutdown(httpServer);
+
     httpServer.listen(PORT, HOST, () => {
         logger.info(`✅ Server running at http://${HOST}:${PORT}`);
     })
 }
 
-startServer();
+/**
+ * 优雅关闭：收到 SIGTERM/SIGINT 时按序释放各长连接（HTTP → Socket.IO → Mongo → Redis → Postgres）。
+ * 任一失败不阻断后续释放；超时（10s）仍未完成则强制退出，避免挂死。
+ */
+function setupGracefulShutdown(httpServer: http.Server): void {
+    let shuttingDown = false;
+
+    const shutdown = async (signal: string): Promise<void> => {
+        if (shuttingDown) return; // 防止重复触发
+        shuttingDown = true;
+        logger.info(`收到 ${signal}，开始优雅关闭…`);
+
+        // 强制退出兜底：10s 后仍未完成则直接退出
+        const forceExit = setTimeout(() => {
+            logger.error('优雅关闭超时（10s），强制退出');
+            process.exit(1);
+        }, 10_000);
+        forceExit.unref?.();
+
+        try {
+            // 1) 停止接受新 HTTP 连接，等待在途请求结束
+            httpServer.close(() => logger.info('HTTP 服务已停止'));
+            // 2) 关闭 Socket.IO（踢掉所有在线 socket，触发 onDisconnect 清理 redis 在线态）
+            (userConnections as any).socketIOServer?.close?.();
+            // 3) 各数据库连接
+            await Promise.allSettled([
+                disconnectMongo().catch((e) => logger.error(`Mongo 断开失败: ${e.message}`)),
+                disconnectRedis().catch((e) => logger.error(`Redis 断开失败: ${e.message}`)),
+                pgPool.end().catch((e: Error) => logger.error(`Postgres 断开失败: ${e.message}`)),
+            ]);
+            logger.info('✅ 所有连接已释放，进程退出');
+            process.exit(0);
+        } catch (err) {
+            const e = err as Error;
+            logger.error(`优雅关闭异常: ${e.message}`);
+            process.exit(1);
+        }
+    };
+
+    process.on('SIGTERM', () => void shutdown('SIGTERM'));
+    process.on('SIGINT', () => void shutdown('SIGINT'));
+}
+
+startServer().catch((err) => {
+    logger.error(`启动失败: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+});
