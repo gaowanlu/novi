@@ -9,10 +9,10 @@ novi is a friend-based chat application built around a single invariant: **the s
 ## How it works
 
 - **Your identity, portable.** Every friendship gets its own RSA key pair (identified by a `novicode` relationship version) that lives **only on your device**. Messages are RSA-encrypted and SHA256-signed by the sender; the receiver confirms successful decryption via a crypto-ack. When a platform shuts down or bans you, your encryption pairs — and the encrypted history they protect — move with you, because no platform ever held them.
-- **Stateless clients.** Clients keep no chat history — only the per-friend key 5-tuples `{friendId, novicode, ownPrivateKey, ownPublicKey, friendPublicKey}`.
-- **Multi-node backend.** The API scales horizontally: a user's live socket connection is pinned to one node, and cross-node delivery is coordinated through Redis (presence) and RabbitMQ (node-to-node IPC). Socket.IO is used strictly for lightweight event *notifications* — message payloads always come back over HTTP.
+- **Stateless clients.** Clients keep no chat history — only the per-friend key 5-tuples `{friendId, novicode, ownPrivateKey, ownPublicKey, friendPublicKey}`. Private keys are never stored in plaintext on disk: they are wrapped in a local, password-derived AES-256-GCM vault (PBKDF2, ~310k iterations) and live **in memory only** while the session is unlocked. You can export a key backup and re-import it on a new device.
+- **Multi-node backend.** The API scales horizontally: a user's live socket connection is pinned to one node, and cross-node delivery is coordinated through Redis (presence) and RabbitMQ (node-to-node IPC). Socket.IO is used strictly for lightweight event *notifications* — the actual ciphertext is persisted and pulled back over HTTP.
 
-> 📐 The full cryptographic design lives in [`novi-backend/docs/plan.md`](novi-backend/docs/plan.md). The server-side crypto path is designed and referenced but **not yet wired into the live message route** — see the doc for the intended flow.
+> 🔐 The end-to-end crypto is **live**: the send route persists the full encrypted envelope (`content` ciphertext, `iv`, `wrappedKey`, `wrappedKeySelf`, `sig`, `preHash`, `currHash`) and the receiver decrypts locally in the browser via WebCrypto. See [`novi-frontend/src/crypto/`](novi-frontend/src/crypto/) for the client implementation and [`novi-backend/test/e2eCryptoRoundtrip.ts`](novi-backend/test/e2eCryptoRoundtrip.ts) for a self-contained Node-crypto round-trip check. The server still never sees plaintext or private keys.
 
 ## Repository layout
 
@@ -58,10 +58,12 @@ npm run dev   # tsx watch, auto-restarts on change
 ```bash
 cd ../novi-frontend
 npm install
+# Create a local .env (gitignored) — there is no committed .env.example:
+printf 'VITE_NOVI_HOST=http://localhost:3000\n' > .env
 npm run dev   # Vite dev server
 ```
 
-> **Note:** the frontend's API host is currently hardcoded in [`novi-frontend/src/api/APIMacro.ts`](novi-frontend/src/api/APIMacro.ts) — point it at your local backend (`http://localhost:3000`) for local development.
+> **Note:** the frontend's API host is configurable via `VITE_NOVI_HOST` in [`novi-frontend/.env`](novi-frontend/.env) (gitignored, no committed `.env.example`). Point it at your local backend for local development; it falls back to the deployed host when the variable is absent.
 
 ## Scripts
 
@@ -72,6 +74,7 @@ npm run dev   # Vite dev server
 | `npm run dev` | Run with auto-restart (transpile-only) |
 | `npm run build` | Compile TypeScript to `dist/` |
 | `npm start` | Run the compiled server |
+| `npm run lint` | Lint (declared; currently broken — no ESLint config) |
 
 **`novi-frontend/`**
 
@@ -82,7 +85,14 @@ npm run dev   # Vite dev server
 | `npm run lint` | Run ESLint |
 | `npm run preview` | Serve the production build locally |
 
-Neither project has a test runner configured.
+## Verification
+
+Neither project has a unit/integration test runner. Quality gates per package:
+
+- **Backend** — `npm run build` (TypeScript compile) is the gate. `npm run lint` is declared but **currently broken** (no ESLint config file present).
+- **Frontend** — `npm run lint` (works) then `npm run build`.
+
+`novi-backend/test/` holds ad-hoc scripts (run with `npx tsx <file>`), the most useful being `e2eCryptoRoundtrip.ts`, which exercises the full encrypt → sign → chain → decrypt → verify cycle and tamper detection in Node crypto. Keep its parameters in sync with the frontend's WebCrypto implementation.
 
 ## License
 
