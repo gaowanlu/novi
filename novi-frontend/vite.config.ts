@@ -4,10 +4,9 @@ import path from "path"
 import tailwindcss from '@tailwindcss/vite'
 
 // https://vite.dev/config/
-// 本地演示/联调：把 /api 代理到独立的 mock 服务（见仓库根 mock/），
-// 这样前端无需改动、也无需真实后端（Mongo/Redis/RabbitMQ/Kafka）即可完整跑起来。
-// 代理目标可用环境变量 NOVI_MOCK_PORT 覆盖，默认 3300。
-const MOCK_TARGET = process.env.NOVI_MOCK_TARGET ?? 'http://127.0.0.1:3300'
+// 本地开发：把 /api 代理到真实后端，避免跨域。
+// 代理目标可用环境变量 NOVI_BACKEND_TARGET 覆盖，默认 http://127.0.0.1:3000（本地后端端口）。
+const BACKEND_TARGET = process.env.NOVI_BACKEND_TARGET ?? 'http://127.0.0.1:3000'
 
 export default defineConfig({
   plugins: [
@@ -22,7 +21,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: MOCK_TARGET,
+        target: BACKEND_TARGET,
         changeOrigin: true,
       },
     },

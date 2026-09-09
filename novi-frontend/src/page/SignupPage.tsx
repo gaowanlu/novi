@@ -4,7 +4,8 @@ import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
 import { APIMacro } from "../api/APIMacro";
-import { apiFetch } from "../api/request";
+import { apiFetch, parseJson, errorText } from "../api/request";
+import type { ApiError } from "../api/types";
 import { PageShell } from "@/components/PageShell";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -29,16 +30,16 @@ export default function SignupPage() {
                 body: JSON.stringify({ userName, email, password }),
             });
 
-            const data = await res.json();
+            const raw = await parseJson(res);
 
             if (res.ok) {
                 toast.success("注册成功", { description: "请登录你的新账号" });
                 navigate("/signin");
             } else {
-                toast.error("注册失败", { description: data.message });
+                toast.error("注册失败", { description: errorText(res, raw as ApiError | null) });
             }
-        } catch (err: any) {
-            toast.error("网络错误", { description: err?.message });
+        } catch (err: unknown) {
+            toast.error("网络错误", { description: err instanceof Error ? err.message : undefined });
         } finally {
             setProcessing(false);
         }

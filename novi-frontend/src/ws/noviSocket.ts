@@ -22,7 +22,31 @@ export type NoviSocketEvent =
     | "novi_friend_message_readed"
     | "novi_friend_message_crypto_ack";
 
-type Handler = (payload: any) => void;
+/** 服务端推送的统一载荷形状（各事件字段按需存在，见 plan.md 约定） */
+export interface NoviSocketPayload {
+    /** 发起方（WS 推送里是原始 ObjectId 字符串，非聚合的 {userId} 对象） */
+    requester?: string | null;
+    /** 接收方（同上） */
+    receiver?: string | null;
+    status?: string | null;
+    /** 消息 ID（消息类事件） */
+    _id?: string | null;
+    sender?: string | null;
+    receiverId?: string | null;
+    /** 关系代次 */
+    novicode?: string | null;
+    /** 发起方公钥（base64 JWK） */
+    requesterPublicKey?: string | null;
+    /** 接收方公钥（base64 JWK） */
+    receiverPublicKey?: string | null;
+    /** 消息 ID 列表（已读/解密确认类事件，可能为单对象或数组） */
+    messageIds?: string[] | string;
+    /** 消息正文（密文 base64；调用方按需转型为 FriendMessageItem） */
+    content?: string | null;
+    [key: string]: unknown;
+}
+
+type Handler = (payload: NoviSocketPayload) => void;
 
 let socket: Socket | null = null;
 // 所有已注册监听：event -> handler 列表。每次（重）连接成功时统一挂载，
@@ -116,7 +140,6 @@ export function useNoviSocketEvent(event: NoviSocketEvent, handler: Handler): So
             s.off(event, wrapped);
         };
         // 注意：handler 变化不触发重新注册，wrapped 经 handlerRef 永远读最新值
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [s, event]);
 
     return s;

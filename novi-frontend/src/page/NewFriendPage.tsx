@@ -15,9 +15,9 @@ import {
 } from 'lucide-react';
 
 import { APIMacro } from '@/api/APIMacro';
-import { apiFetch } from '@/api/request';
+import { apiFetch, parseJson, errorText } from '@/api/request';
 import { useSessionUser } from '@/context/AuthContext';
-import type { FriendRequestItem } from '@/api/types';
+import type { FriendRequestItem, UserBrief, ApiError } from '@/api/types';
 import { useNoviSocketEvent } from '@/ws/noviSocket';
 import {
     ensureOwnKeys,
@@ -51,18 +51,13 @@ const STATUS_LABEL: Record<string, string> = {
 const formatDateTime = (iso?: string | null) =>
     iso ? new Date(iso).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
 
-interface SearchUserResult {
-    userName: string;
-    _id: string;
-}
-
 export default function NewFriendPage() {
     const user = useSessionUser();
 
     const [searchUserId, setSearchUserId] = useState('');
     const [searchUserName, setSearchUserName] = useState('');
     const [searching, setSearching] = useState(false);
-    const [searchResults, setSearchResults] = useState<SearchUserResult[]>([]);
+    const [searchResults, setSearchResults] = useState<UserBrief[]>([]);
     const [searched, setSearched] = useState(false);
 
     const [requests, setRequests] = useState<FriendRequestItem[]>([]);
@@ -79,8 +74,8 @@ export default function NewFriendPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ _id: searchUserId, userName: searchUserName })
             });
-            const data = await res.json();
-            if (res.ok) setSearchResults(data);
+            const data = await parseJson(res);
+            if (res.ok) setSearchResults((data as UserBrief[] | null) ?? []);
             else setSearchResults([]);
         } catch {
             setSearchResults([]);
@@ -97,7 +92,7 @@ export default function NewFriendPage() {
             try {
                 const res0 = await apiFetch(APIMacro.GETFRIENDREQUEST, { method: 'GET' });
                 if (res0.ok) {
-                    const list = (await res0.json()) as FriendRequestItem[];
+                    const list = ((await parseJson(res0)) as FriendRequestItem[] | null) ?? [];
                     const count = list.filter(r =>
                         (r.requester?.userId === _id && r.receiver?.userId === user.userId) ||
                         (r.requester?.userId === user.userId && r.receiver?.userId === _id)
@@ -112,18 +107,18 @@ export default function NewFriendPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ targetUserId: _id, publicKey: myPublicKey })
             });
-            const data = await res.json();
+            const data = await parseJson(res);
             if (res.ok) {
                 // 自愈：服务器分配的代次为准，不一致则重贴本地元组/链头
-                const serverNovi = (data as { novicode?: string | null })?.novicode;
+                const serverNovi = (data as { novicode?: string | null } | null)?.novicode ?? null;
                 if (serverNovi && serverNovi !== novicode) await relabelNovicode(user.userId, _id, novicode, serverNovi);
                 toast.success('申请已发送');
                 refreshRequests();
             } else {
-                toast.error(data.message);
+                toast.error(errorText(res, data as ApiError | null));
             }
-        } catch (err: any) {
-            toast.error(err?.message || '发送失败');
+        } catch (err: unknown) {
+            toast.error(err instanceof Error ? (err.message || '发送失败') : '发送失败');
         }
     };
 
@@ -132,9 +127,9 @@ export default function NewFriendPage() {
         setLoadingRequests(true);
         try {
             const res = await apiFetch(APIMacro.GETFRIENDREQUEST, { method: 'GET' });
-            const data = await res.json();
+            const data = await parseJson(res);
             if (res.ok) {
-                const list: FriendRequestItem[] = [...data].reverse();
+                const list: FriendRequestItem[] = [...((data as FriendRequestItem[] | null) ?? [])].reverse();
                 list.sort((a, b) => {
                     const pa = a.status === 'pending' ? 0 : 1;
                     const pb = b.status === 'pending' ? 0 : 1;
@@ -163,23 +158,24 @@ export default function NewFriendPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ friendRequestId, status, publicKey })
             });
-            const data = await res.json();
+            const data = await parseJson(res);
+            const resp = data as { requesterPublicKey?: string | null; novicode?: string | null } | null;
             if (res.ok) {
                 // 双保险：用响应里的双方公钥再补齐一次 5 元组（推送可能先到/未到）
                 if (status === 'accepted') {
                     const otherId = user.userId === item.receiver.userId ? item.requester.userId! : item.receiver.userId!;
                     await finalizeAsReceiver(
                         user.userId, otherId,
-                        data?.requesterPublicKey ?? item.publicKey ?? null,
-                        (data as { novicode?: string | null })?.novicode ?? item.novicode ?? DEFAULT_NOVI_CODE
+                        resp?.requesterPublicKey ?? item.publicKey ?? null,
+                        resp?.novicode ?? item.novicode ?? DEFAULT_NOVI_CODE
                     );
                 }
                 refreshRequests();
             } else {
-                toast.error(data.message);
+                toast.error(errorText(res, data as ApiError | null));
             }
-        } catch (err: any) {
-            toast.error(err?.message);
+        } catch (err: unknown) {
+            toast.error(err instanceof Error ? err.message : '操作失败');
         }
     };
 
@@ -189,11 +185,11 @@ export default function NewFriendPage() {
                 `${APIMacro.DELETEFRIENDREQUEST}?friendRequestId=${friendRequestId}`,
                 { method: 'DELETE' }
             );
-            const data = await res.json();
+            const data = (await parseJson(res)) as ApiError | null;
             if (res.ok) refreshRequests();
-            else toast.error(data.message);
-        } catch (err: any) {
-            toast.error(err?.message);
+            else toast.error(errorText(res, data));
+        } catch (err: unknown) {
+            toast.error(err instanceof Error ? err.message : '操作失败');
         }
     };
 
@@ -202,14 +198,14 @@ export default function NewFriendPage() {
         try {
             const params = new URLSearchParams({ targetUserId, friendRequestId });
             const res = await apiFetch(`${APIMacro.DELETEFRIEND}?${params.toString()}`, { method: 'DELETE' });
-            const data = await res.json();
+            const data = (await parseJson(res)) as ApiError | null;
             if (res.ok) {
                 // 删除好友：清理本地与该好友的全部代次密钥与链头（尽量无痕；重新添加会协商新代次）
                 await removeFriendKeys(user.userId, targetUserId);
                 refreshRequests();
-            } else toast.error(data.message);
-        } catch (err: any) {
-            toast.error(err?.message);
+            } else toast.error(errorText(res, data));
+        } catch (err: unknown) {
+            toast.error(err instanceof Error ? err.message : '删除失败');
         }
     };
 

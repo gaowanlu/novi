@@ -15,7 +15,8 @@ import {
 import { Link } from 'react-router-dom';
 
 import { APIMacro } from '../api/APIMacro';
-import { apiFetch } from '../api/request';
+import { apiFetch, parseJson, errorText } from '../api/request';
+import type { ApiError } from '../api/types';
 import { useAuth, useSessionUser } from '../context/AuthContext';
 import { useVault } from '../context/VaultContext';
 import { PageShell } from '@/components/PageShell';
@@ -82,8 +83,8 @@ function UserInfoPage() {
             setNewPw('');
             setConfirmPw('');
             toast.success('保险箱密码已更新');
-        } catch (err: any) {
-            toast.error(err?.message || '修改失败');
+        } catch (err: unknown) {
+            toast.error(err instanceof Error ? (err.message || '修改失败') : '修改失败');
         } finally {
             setPwBusy(false);
         }
@@ -101,8 +102,8 @@ function UserInfoPage() {
             }
             await importKeysBackup(bundle);
             toast.success('密钥已导入', { description: '历史消息现在可重新解密' });
-        } catch (err: any) {
-            toast.error('导入失败', { description: err?.message || '文件格式不正确' });
+        } catch (err: unknown) {
+            toast.error('导入失败', { description: err instanceof Error ? (err.message || '文件格式不正确') : '文件格式不正确' });
         } finally {
             if (importFileRef.current) importFileRef.current.value = '';
         }
@@ -123,16 +124,17 @@ function UserInfoPage() {
                 })
             });
 
-            const data = await res.json();
+            const raw = await parseJson(res);
 
             if (res.ok) {
+                const data = raw as { email: string; userName: string };
                 toast.success('修改成功', { description: '你的资料已更新' });
                 updateEmailAndUserName(data.email, data.userName);
             } else {
-                toast.error('修改失败', { description: data.message });
+                toast.error('修改失败', { description: errorText(res, raw as ApiError | null) });
             }
-        } catch (err: any) {
-            toast.error('网络错误', { description: err?.message });
+        } catch (err: unknown) {
+            toast.error('网络错误', { description: err instanceof Error ? err.message : undefined });
         } finally {
             setLoading(false);
         }

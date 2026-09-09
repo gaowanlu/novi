@@ -9,7 +9,7 @@ import { APIMacro } from "@/api/APIMacro";
 import { useAuth } from "@/context/AuthContext";
 import type { FriendMessageItem, FriendRequestItem, UnreadSummary } from "@/api/types";
 import { toast } from "sonner";
-import { useNoviSocketEvent } from "@/ws/noviSocket";
+import { useNoviSocketEvent, type NoviSocketPayload } from "@/ws/noviSocket";
 import { removeFriendKeys } from "@/crypto/keyStore";
 import { completeTupleFromRequestItem } from "@/crypto/friendKeys";
 
@@ -60,8 +60,8 @@ function FunctionalPage() {
                 }
                 return null;
             });
-        } catch (err: any) {
-            toast.error(err.message || "加载好友列表失败");
+        } catch (err: unknown) {
+            toast.error(err instanceof Error ? (err.message || "加载好友列表失败") : "加载好友列表失败");
         } finally {
             setFriendLoading(false);
         }
@@ -97,7 +97,7 @@ function FunctionalPage() {
 
     // 收到新消息：更新好友列表排序/摘要/未读徽章；若属于当前打开的会话则直接追加气泡
     useNoviSocketEvent("novi_friend_message_comming", (payload) => {
-        const m = payload as FriendMessageItem;
+        const m = payload as unknown as FriendMessageItem;
         if (!m?._id) return;
 
         // 刷新好友列表（新好友关系/排序）与未读徽章
@@ -114,9 +114,12 @@ function FunctionalPage() {
     });
 
     // 消息被标为已读：更新打开会话中对应气泡的已读状态（双勾）
+    // 后端推送的 payload 是消息对象数组（见 message.ts markreaded），可能为单个对象
     useNoviSocketEvent("novi_friend_message_readed", (payload) => {
-        const list: any[] = Array.isArray(payload) ? payload : [payload];
-        const ids: string[] = list.map((p: any) => p?._id).filter(Boolean);
+        const raw = Array.isArray(payload) ? payload : [payload] as unknown as NoviSocketPayload[];
+        const ids: string[] = raw
+            .map((p) => (typeof p._id === "string" ? p._id : ""))
+            .filter((id): id is string => id.length > 0);
         if (ids.length === 0) return;
         markReadedRef.current?.(ids);
     });

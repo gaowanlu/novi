@@ -21,7 +21,10 @@ interface AuthContextType {
     /** 本地 token 是否已通过服务端校验（刷新页面后初始为 false） */
     tokenVerified: boolean;
     login: (token: string, user: SessionUser) => void;
+    /** 仅清除本地会话（不调用服务端），用于 token 已失效等被动登出场景 */
     logout: () => void;
+    /** 主动登出：先调用服务端删除 Redis 会话（撤销机制），失败不阻塞本地退出 */
+    serverLogout: () => Promise<void>;
     updateEmailAndUserName: (email: string, userName: string) => void;
 }
 
@@ -56,6 +59,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         window.location.href = '/signin';
     };
 
+    // 主动登出：调用服务端删除 user:auth:{_id}（撤销机制的唯一手段，
+    // 否则服务端会话会存活到 TTL 过期）。在清除本地 token 之前发起，
+    // 保证请求头里仍带着有效 token；网络错误忽略，不阻塞本地退出。
+    const serverLogout = async () => {
+        try {
+            await apiFetch(APIMacro.LOGOUT, { method: 'GET' });
+        } catch {
+            // 忽略：本地仍会退出
+        }
+        clearSession();
+        window.location.href = '/signin';
+    };
+
     const updateEmailAndUserName = (email: string, userName: string) => {
         if (!user) return;
         const newUserInfo: SessionUser = { ...user, email, userName };
@@ -84,7 +100,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         })();
 
         return () => { cancelled = true; };
-    }, [token]);
+    }, [token, tokenVerified]);
 
     // 心跳续费：只要页面开着，token 就不会过期
     useEffect(() => {
@@ -105,7 +121,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }, [token, tokenVerified]);
 
     return (
-        <AuthContext.Provider value={{ token, user, tokenVerified, login, logout, updateEmailAndUserName }}>
+        <AuthContext.Provider value={{ token, user, tokenVerified, login, logout, serverLogout, updateEmailAndUserName }}>
             {children}
         </AuthContext.Provider>
     );

@@ -4,7 +4,8 @@ import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 
 import { APIMacro } from '../api/APIMacro';
-import { apiFetch } from '../api/request';
+import { apiFetch, parseJson, errorText } from '../api/request';
+import type { LoginResult, ApiError } from '../api/types';
 import { useAuth } from '../context/AuthContext';
 import { PageShell } from '@/components/PageShell';
 import { Button } from '@/components/ui/button';
@@ -33,16 +34,17 @@ function SigninPage() {
                 body: JSON.stringify({ email, password }),
             });
 
-            const data = await res.json();
+            const raw = await parseJson(res);
 
             if (res.ok) {
+                const data = raw as LoginResult;
                 login(data.jwtToken, { userId: data.userId, userName: data.userName, email: data.email });
                 navigate(from || '/functional');
             } else {
-                toast.error('登录失败', { description: data.message });
+                toast.error('登录失败', { description: errorText(res, raw as ApiError | null) });
             }
-        } catch (err: any) {
-            toast.error('网络错误', { description: err?.message });
+        } catch (err: unknown) {
+            toast.error('网络错误', { description: err instanceof Error ? err.message : undefined });
         } finally {
             setProcessing(false);
         }
@@ -75,13 +77,14 @@ function SigninPage() {
                     <div className="flex flex-col gap-2">
                         <div className="flex items-center justify-between">
                             <Label htmlFor="password">密码</Label>
-                            <a
-                                href="#"
-                                className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-                                onClick={e => e.preventDefault()}
+                            <button
+                                type="button"
+                                className="cursor-not-allowed text-xs text-muted-foreground/60 underline-offset-4"
+                                title="功能暂未开放"
+                                onClick={() => toast.info('忘记密码功能暂未开放')}
                             >
                                 忘记密码？
-                            </a>
+                            </button>
                         </div>
                         <Input
                             id="password"

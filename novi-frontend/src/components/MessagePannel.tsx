@@ -93,8 +93,11 @@ export default function MessagePanel({
 }: {
     friend: UserInfo | null;
     user?: { userId: string } | null;
-    /** 由 FunctionalPage 注入：WS 推送时向当前会话追加新消息 / 标记已读 */
-    registerPanel?: (append: (m: FriendMessageItem) => void, markReaded: (ids: string[]) => void) => void;
+    /** 由 FunctionalPage 注入：WS 推送时向当前会话追加新消息 / 标记已读；传 null 解绑（卸载时） */
+    registerPanel?: (
+        append: ((m: FriendMessageItem) => void) | null,
+        markReaded: ((ids: string[]) => void) | null
+    ) => void;
 }) {
     const myUserId = user?.userId ?? "";
 
@@ -141,7 +144,7 @@ export default function MessagePanel({
                 if (!res.ok) throw new Error(errorText(res, data));
                 setMessages(prev => prev.map(m =>
                     ids.includes(m._id) ? { ...m, cryptoAckAt: m.cryptoAckAt ?? new Date().toISOString() } : m));
-            } catch (err: any) {
+            } catch (err: unknown) {
                 console.error("crypto ack failed:", err);
             }
         }, 1000);
@@ -345,7 +348,7 @@ export default function MessagePanel({
                 if (!res.ok) throw new Error(errorText(res, data));
                 setMessages(prev => prev.map(m =>
                     ids.includes(m._id) ? { ...m, readAt: m.readAt ?? new Date().toISOString() } : m));
-            } catch (err: any) {
+            } catch (err: unknown) {
                 console.error("markreaded failed:", err);
             }
         }, 1000);
@@ -415,10 +418,10 @@ export default function MessagePanel({
                     if (toRead.length) markRead(toRead);
                     return prev;
                 });
-            } catch (err: any) {
+            } catch (err: unknown) {
                 if (!cancelled) {
                     setMessages([]);
-                    setError(err.message || "加载消息失败");
+                    setError(err instanceof Error ? (err.message || "加载消息失败") : "加载消息失败");
                 }
             } finally {
                 if (!cancelled) setLoading(false);
@@ -472,7 +475,7 @@ export default function MessagePanel({
                 markRead(ids);
             }
         );
-        return () => registerPanel(null as any, null as any);
+        return () => registerPanel(null, null);
         // 依赖取 userId 原语（稳定）；不取 friend 对象引用
         // enqueueChainStep/persistChainHeadSafe 以 userId 原语为依赖，随 friend 切换同步更新
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -543,12 +546,12 @@ export default function MessagePanel({
                 await verifyChainWindow(older, false);
             }
             if (older.length < PAGE_SIZE) setHasMore(false);
-        } catch (err: any) {
-            toast.error(err.message || "加载历史消息失败");
+        } catch (err: unknown) {
+            toast.error(err instanceof Error ? (err.message || "加载历史消息失败") : "加载历史消息失败");
         } finally {
             setLoadingOlder(false);
         }
-    }, [friend, loadingOlder, hasMore, loading, messages, newCount, verifyChainWindow]);
+    }, [friend, myUserId, loadingOlder, hasMore, loading, messages, newCount, verifyChainWindow]);
 
     const sendMessage = async () => {
         const text = input.trim();
@@ -618,8 +621,8 @@ export default function MessagePanel({
             }
             setMessages(prev => prev.map(m => (m._id === tempId
                 ? { ...saved, plain: text, verifyStatus: "mine" } : m)));
-        } catch (err: any) {
-            toast.error(err.message || "发送失败");
+        } catch (err: unknown) {
+            toast.error(err instanceof Error ? (err.message || "发送失败") : "发送失败");
             setMessages(prev => prev.filter(m => m._id !== tempId));
         } finally {
             setSending(false);
