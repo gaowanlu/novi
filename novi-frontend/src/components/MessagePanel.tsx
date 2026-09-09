@@ -670,7 +670,7 @@ export default function MessagePanel({
     return (
         <section className="chat-wallpaper flex h-full min-h-0 flex-1 flex-col text-wa-bubble-fg">
             {/* 顶栏 */}
-            <header className="flex items-center gap-3 bg-wa-header px-3 py-2.5 text-wa-header-fg">
+            <header className="flex h-16 items-center gap-3 bg-wa-header px-3 text-wa-header-fg">
                 <Avatar className="size-10 shrink-0">
                     <AvatarFallback className={AVATAR_BG_CLASS + " text-sm font-medium text-wa-header-fg"}>
                         {friend.userName?.trim()?.slice(0, 2) || "?"}

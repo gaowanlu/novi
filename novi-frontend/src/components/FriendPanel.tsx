@@ -71,7 +71,7 @@ export default function FriendPanel({
     return (
         <aside className={cn("flex h-full min-h-0 flex-col border-r border-wa-line bg-wa-panel text-wa-panel-fg", className)}>
             {/* 头部：品牌 + 操作 */}
-            <div className="flex items-center justify-between bg-wa-header px-3 py-3 text-wa-header-fg">
+            <div className="flex h-16 items-center justify-between bg-wa-header px-3 text-wa-header-fg">
                 <div className="flex items-center gap-2">
                     <div className="flex size-8 items-center justify-center rounded-lg bg-white/20">
                         <MessageCircle className="size-4" data-icon="inline-start" />
