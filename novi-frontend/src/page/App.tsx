@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { lazy, Suspense, type ReactNode } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
@@ -9,9 +9,18 @@ import HomePage from './HomePage'
 import SigninPage from './SigninPage'
 import SignupPage from './SignupPage'
 import LogoutPage from './LogoutPage'
-import FunctionalPage from './FunctionalPage'
-import UserInfoPage from './UserInfoPage'
-import NewFriendPage from './NewFriendPage'
+// 认证后的重页面（聊天 + 加密核心）懒加载：拆出独立 chunk，减小首包、可缓存
+const FunctionalPage = lazy(() => import('./FunctionalPage'))
+const UserInfoPage = lazy(() => import('./UserInfoPage'))
+const NewFriendPage = lazy(() => import('./NewFriendPage'))
+
+function LazyFallback() {
+    return (
+        <div className="flex min-h-dvh items-center justify-center bg-background">
+            <Loader2 className="size-6 animate-spin text-muted-foreground" />
+        </div>
+    )
+}
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
     const { token, tokenVerified } = useAuth()
@@ -64,7 +73,7 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
         )
     }
 
-    return <>{children}</>
+    return <Suspense fallback={<LazyFallback />}>{children}</Suspense>
 }
 
 function App() {

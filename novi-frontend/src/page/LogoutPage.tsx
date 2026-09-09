@@ -15,14 +15,13 @@ export default function LogoutPage() {
     const navigate = useNavigate();
 
     // 进入该页即退出登录：调用服务端撤销会话 + 锁定保险箱（清除内存私钥）
-    // useEffect 避免渲染期副作用；serverLogout 内部 best-effort，失败不阻塞跳转
+    // 全部放 effect（含 toast）：渲染期跑副作用会在 StrictMode 双挂载下重复触发
     useEffect(() => {
         lock();
         void serverLogout();
+        toast.success("已退出登录");
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
-
-    toast.success("已退出登录");
 
     return (
         <PageShell>

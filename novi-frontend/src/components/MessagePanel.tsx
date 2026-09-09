@@ -30,7 +30,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { apiFetch, parseJson, errorText } from "@/api/request";
 import { APIMacro } from "@/api/APIMacro";
-import type { FriendMessageItem } from "@/api/types";
+import type { FriendMessageItem, ChatUser, SelectedFriend } from "@/api/types";
 import {
     encryptMessage,
     decryptMessage,
@@ -45,13 +45,6 @@ import {
     setChainHead
 } from "@/crypto/keyStore";
 import { isReady, DEFAULT_NOVI_CODE, resolveCurrentNovicode } from "@/crypto/friendKeys";
-
-interface UserInfo {
-    userId: string;
-    userName: string;
-    /** 关系代次（版本号），来自好友申请记录；删除后重新添加会 +1 */
-    novicode?: string | null;
-}
 
 const PAGE_SIZE = 30;
 
@@ -91,8 +84,8 @@ export default function MessagePanel({
     user,
     registerPanel
 }: {
-    friend: UserInfo | null;
-    user?: { userId: string } | null;
+    friend: SelectedFriend | null;
+    user?: ChatUser | null;
     /** 由 FunctionalPage 注入：WS 推送时向当前会话追加新消息 / 标记已读；传 null 解绑（卸载时） */
     registerPanel?: (
         append: ((m: FriendMessageItem) => void) | null,

@@ -22,6 +22,7 @@ import {
     vaultStatus,
     setupVault,
 } from "./vault.js";
+import { toast } from "sonner";
 
 export interface FriendKeyTuple {
     friendId: string;
@@ -40,6 +41,18 @@ export interface KeyBundle {
 const STORE_KEY = "novi:e2e:keys";
 const HEADS_KEY = "novi:e2e:chainheads";
 
+// 配额失败去抖：写 localStorage 失败（通常 5MB 配额满 / 隐私模式禁用）会静默丢数据，
+// 用 toast 提醒一次即可，避免每条消息都刷屏。
+let lastStorageWarnAt = 0;
+function warnStorage(name: string, err: unknown): void {
+    console.error(`[keyStore] 写入 ${name} 失败`, err);
+    const now = Date.now();
+    if (now - lastStorageWarnAt > 10_000) {
+        lastStorageWarnAt = now;
+        toast.error("本地存储失败（可能已满）", { description: "私钥/链头可能未保存，建议导出备份或清空旧好友" });
+    }
+}
+
 // ---------- 读取 / 写入 ----------
 
 function readRawTuples(myId: string): FriendKeyTuple[] {
@@ -54,10 +67,19 @@ function readRawTuples(myId: string): FriendKeyTuple[] {
 }
 
 function writeRawTuples(myId: string, tuples: FriendKeyTuple[]): void {
-    const raw = localStorage.getItem(STORE_KEY);
-    const all: Record<string, FriendKeyTuple[]> = raw ? JSON.parse(raw) : {};
+    let all: Record<string, FriendKeyTuple[]> = {};
+    try {
+        const raw = localStorage.getItem(STORE_KEY);
+        all = raw ? JSON.parse(raw) : {};
+    } catch {
+        all = {};
+    }
     all[myId] = tuples;
-    localStorage.setItem(STORE_KEY, JSON.stringify(all));
+    try {
+        localStorage.setItem(STORE_KEY, JSON.stringify(all));
+    } catch (err) {
+        warnStorage(STORE_KEY, err);
+    }
 }
 
 function readHeads(myId: string): Record<string, string> {
@@ -72,10 +94,19 @@ function readHeads(myId: string): Record<string, string> {
 }
 
 function writeHeads(myId: string, heads: Record<string, string>): void {
-    const raw = localStorage.getItem(HEADS_KEY);
-    const all: Record<string, Record<string, string>> = raw ? JSON.parse(raw) : {};
+    let all: Record<string, Record<string, string>> = {};
+    try {
+        const raw = localStorage.getItem(HEADS_KEY);
+        all = raw ? JSON.parse(raw) : {};
+    } catch {
+        all = {};
+    }
     all[myId] = heads;
-    localStorage.setItem(HEADS_KEY, JSON.stringify(all));
+    try {
+        localStorage.setItem(HEADS_KEY, JSON.stringify(all));
+    } catch (err) {
+        warnStorage(HEADS_KEY, err);
+    }
 }
 
 const headKey = (friendId: string, novicode: string) => `${friendId}|${novicode}`;
@@ -293,17 +324,27 @@ export async function importKeysBackup(bundle: KeyBundle): Promise<void> {
 
 /** 删除当前用户的全部密钥与链头（清空本地密钥） */
 export function clearKeys(myId: string): void {
-    const rawTuples = localStorage.getItem(STORE_KEY);
-    const allTuples: Record<string, FriendKeyTuple[]> | null = rawTuples ? JSON.parse(rawTuples) : null;
+    let allTuples: Record<string, FriendKeyTuple[]> | null = null;
+    try {
+        const rawTuples = localStorage.getItem(STORE_KEY);
+        allTuples = rawTuples ? JSON.parse(rawTuples) : null;
+    } catch {
+        allTuples = null;
+    }
     if (allTuples) delete allTuples[myId];
-    if (allTuples && Object.keys(allTuples).length > 0) localStorage.setItem(STORE_KEY, JSON.stringify(allTuples));
-    else localStorage.removeItem(STORE_KEY);
+    try {
+        if (allTuples && Object.keys(allTuples).length > 0) localStorage.setItem(STORE_KEY, JSON.stringify(allTuples));
+        else localStorage.removeItem(STORE_KEY);
 
-    const rawHeads = localStorage.getItem(HEADS_KEY);
-    const allHeads: Record<string, Record<string, string>> | null = rawHeads ? JSON.parse(rawHeads) : null;
-    if (allHeads) delete allHeads[myId];
-    if (allHeads && Object.keys(allHeads).length > 0) localStorage.setItem(HEADS_KEY, JSON.stringify(allHeads));
-    else localStorage.removeItem(HEADS_KEY);
+        let allHeads: Record<string, Record<string, string>> | null = null;
+        const rawHeads = localStorage.getItem(HEADS_KEY);
+        allHeads = rawHeads ? JSON.parse(rawHeads) : null;
+        if (allHeads) delete allHeads[myId];
+        if (allHeads && Object.keys(allHeads).length > 0) localStorage.setItem(HEADS_KEY, JSON.stringify(allHeads));
+        else localStorage.removeItem(HEADS_KEY);
+    } catch (err) {
+        warnStorage(STORE_KEY, err);
+    }
 
     clearVault(myId);
 }

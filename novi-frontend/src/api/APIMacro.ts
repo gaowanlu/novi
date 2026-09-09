@@ -1,5 +1,6 @@
 // 本地开发可通过 .env 的 VITE_NOVI_HOST 指向本地后端，例如 http://127.0.0.1:3000
-const HOST = import.meta.env.VITE_NOVI_HOST ?? 'http://mfavant.xyz:3000';
+// 兜底值与 vite.config.ts 的 /api 代理目标保持一致（本地后端），避免 .env 缺失时误连远程
+const HOST = import.meta.env.VITE_NOVI_HOST ?? 'http://127.0.0.1:3000';
 
 const LOGIN = `/api/auth/login`;
 const LOGOUT = `/api/auth/logout`;

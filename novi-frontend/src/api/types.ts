@@ -79,3 +79,16 @@ export interface UnreadSummary {
 export interface ApiError {
     message?: string;
 }
+
+// 会话/聊天选中项（FunctionalPage 与 FriendPanel 共用）
+export interface SelectedFriend {
+    userId: string;
+    userName: string;
+    /** 关系代次（版本号），来自好友申请记录；删除后重新添加会 +1 */
+    novicode?: string | null;
+}
+
+// 消息面板当前用户（MessagePanel 用，userId 即可定位身份）
+export interface ChatUser {
+    userId: string;
+}

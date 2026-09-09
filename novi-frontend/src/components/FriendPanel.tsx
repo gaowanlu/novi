@@ -9,16 +9,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { FriendRequestItem } from "@/api/types";
+import type { FriendRequestItem, SelectedFriend } from "@/api/types";
 
 const AVATAR_BG = "bg-[oklch(0.78_0.14_160)]";
-
-interface SelectedFriend {
-    userId: string;
-    userName: string;
-    /** 关系代次（版本号），来自好友申请记录；删除后重新添加会 +1 */
-    novicode?: string | null;
-}
 
 interface FriendPanelProps {
     friendList: FriendRequestItem[];
@@ -88,7 +81,8 @@ export default function FriendPanel({
                         <span className="text-[11px] text-white/70">加密聊天</span>
                     </div>
                 </div>
-                <div className="flex items-center gap-1">
+                {/* 桌面端这些入口在 NavRail，此处仅移动端（lg 以下无 NavRail）显示，避免重复 */}
+                <div className="flex items-center gap-1 lg:hidden">
                     <Button variant="ghost" size="icon" asChild aria-label="个人信息" className="text-wa-header-fg hover:bg-white/15 hover:text-wa-header-fg">
                         <Link to="/user/info"><Info /></Link></Button>
                     <Button variant="ghost" size="icon" asChild aria-label="退出登录" className="text-wa-header-fg hover:bg-white/15 hover:text-wa-header-fg">

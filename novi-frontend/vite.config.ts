@@ -26,4 +26,21 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    // 大型三方库单独分包，让各路由的懒加载 chunk 可被浏览器缓存复用，
+    // 避免全部打进主包（此前单包 622kB）。
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('framer-motion')) return 'motion'
+            if (id.includes('socket.io-client')) return 'socket'
+            if (id.includes('react-dom') || id.includes('react-router') || id.includes('/react/')) return 'react'
+            if (id.includes('@radix-ui') || id.includes('radix-ui')) return 'radix'
+            return 'vendor'
+          }
+        },
+      },
+    },
+  },
 })

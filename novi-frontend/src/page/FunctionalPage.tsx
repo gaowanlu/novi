@@ -1,24 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import NavRail from "@/components/NavRail";
-import FriendPanel from "@/components/FriendPannel";
-import MessagePanel from "@/components/MessagePannel";
+import FriendPanel from "@/components/FriendPanel";
+import MessagePanel from "@/components/MessagePanel";
 // import { Button } from "@/components/ui/button";
 import { apiFetch, parseJson, errorText } from "@/api/request";
 import { APIMacro } from "@/api/APIMacro";
 import { useAuth } from "@/context/AuthContext";
-import type { FriendMessageItem, FriendRequestItem, UnreadSummary } from "@/api/types";
+import type { FriendMessageItem, FriendRequestItem, UnreadSummary, SelectedFriend } from "@/api/types";
 import { toast } from "sonner";
 import { useNoviSocketEvent, type NoviSocketPayload } from "@/ws/noviSocket";
 import { removeFriendKeys } from "@/crypto/keyStore";
 import { completeTupleFromRequestItem } from "@/crypto/friendKeys";
-
-interface SelectedFriend {
-    userId: string;
-    userName: string;
-    /** 关系代次（版本号），来自好友申请记录；删除后重新添加会 +1 */
-    novicode?: string | null;
-}
 
 function FunctionalPage() {
     const [friendList, setFriendList] = useState<FriendRequestItem[]>([]);
