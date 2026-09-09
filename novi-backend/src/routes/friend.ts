@@ -7,6 +7,7 @@ import middlewareValidate from '../middlewares/middlewareValidate.js';
 import middlewareAuth from '../middlewares/middlewareAuth.js';
 import logger from '../logger.js';
 import mongoose from 'mongoose';
+import type { PipelineStage } from 'mongoose';
 import { pushToUsers, logPushError } from '../comm/push.js';
 
 const router = Router();
@@ -90,9 +91,10 @@ const postFriendRequestHandler: RequestHandler = async (
 
         res.status(200).json(saveNewFriendRequest);
         return
-    } catch (err: any) {
-        logger.error(`${err.message}`);
-        res.status(500).json({ message: err.message });
+    } catch (err: unknown) {
+        const e = err instanceof Error ? err.message : String(err);
+        logger.error(`${e}`);
+        res.status(500).json({ message: '内部错误' });
         return
     }
 };
@@ -128,11 +130,12 @@ interface FriendRequestResponse {
 
 // 构建「与我相关的好友申请/好友」聚合流水线，供 GET /request 与 GET / 复用。
 // status 传入时（如 'accepted'）只返回该状态的记录；不传则返回全部历史。
-const buildFriendRequestPipeline = (myUserId: string, status?: string) => {
-    const matchStage: Record<string, any> = {
+const buildFriendRequestPipeline = (myUserId: string, status?: string): PipelineStage[] => {
+    const myObjectId = mongoose.Types.ObjectId.createFromHexString(myUserId);
+    const matchStage: Record<string, unknown> = {
         $or: [
-            { requester: mongoose.Types.ObjectId.createFromHexString(myUserId) },
-            { receiver: mongoose.Types.ObjectId.createFromHexString(myUserId) }
+            { requester: myObjectId },
+            { receiver: myObjectId }
         ]
     };
     if (status) {
@@ -198,9 +201,10 @@ const getFriendRequestHandler: RequestHandler = async (req: IRequest, res: Respo
 
         res.status(200).json(friendRequests);
         return
-    } catch (err: any) {
-        logger.error(`${err.message}`);
-        res.status(500).json({ message: err.message });
+    } catch (err: unknown) {
+        const e = err instanceof Error ? err.message : String(err);
+        logger.error(`${e}`);
+        res.status(500).json({ message: '内部错误' });
         return
     }
 };
@@ -295,9 +299,10 @@ const putFriendRequestHandler: RequestHandler = async (
             receiverPublicKey
         });
         return
-    } catch (err: any) {
-        logger.error(`${err.message}`);
-        res.status(500).json({ message: err.message });
+    } catch (err: unknown) {
+        const e = err instanceof Error ? err.message : String(err);
+        logger.error(`${e}`);
+        res.status(500).json({ message: '内部错误' });
         return
     }
 };
@@ -343,9 +348,12 @@ const deleteFriendHandler: RequestHandler = async (
             return
         }
 
-        // plan.md：删除好友同时删除聊天记录（无痕）——旧代次密文用新密钥无法解密，
-        // 留在库里会污染新友谊的未读汇总 / 拉取窗口
+        // plan.md：删除好友同时删除「当前代次」的聊天记录（无痕）——旧代次密文用新密钥无法解密，
+        // 留在库里会污染新友谊的未读汇总 / 拉取窗口。
+        // 只删当前代次（novicode）的消息：更老的代次在历次删除时已被级联清除，不会残留到此处。
+        const curNovicode = targetFriendRequest.novicode ?? "1";
         await FriendMessage.deleteMany({
+            noviCode: curNovicode,
             $or: [
                 { sender: myUserId, receiver: targetUserId },
                 { sender: targetUserId, receiver: myUserId }
@@ -369,9 +377,10 @@ const deleteFriendHandler: RequestHandler = async (
 
         res.status(200).json(deletedFriendRequest);
         return
-    } catch (err: any) {
-        logger.error(`${err.message}`);
-        res.status(500).json({ message: err.message });
+    } catch (err: unknown) {
+        const e = err instanceof Error ? err.message : String(err);
+        logger.error(`${e}`);
+        res.status(500).json({ message: '内部错误' });
         return
     }
 };
@@ -430,9 +439,10 @@ const deleteFriendRequestHandler: RequestHandler = async (
 
         res.status(200).json(deletedFriendRequest);
         return
-    } catch (err: any) {
-        logger.error(`${err.message}`);
-        res.status(500).json({ message: err.message });
+    } catch (err: unknown) {
+        const e = err instanceof Error ? err.message : String(err);
+        logger.error(`${e}`);
+        res.status(500).json({ message: '内部错误' });
         return
     }
 };
@@ -456,9 +466,10 @@ const getFriendListHandler: RequestHandler = async (
 
         res.status(200).json(friendRequests);
         return
-    } catch (err: any) {
-        logger.error(`${err.message}`);
-        res.status(500).json({ message: err.message });
+    } catch (err: unknown) {
+        const e = err instanceof Error ? err.message : String(err);
+        logger.error(`${e}`);
+        res.status(500).json({ message: '内部错误' });
         return
     }
 };

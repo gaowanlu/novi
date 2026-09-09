@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import type { Document, Model } from "mongoose";
+import logger from "../logger.js";
 
 // 用户文档接口
 interface IUser extends Document {
@@ -205,9 +206,9 @@ const onMongoConnected = async (): Promise<void> => {
             { $or: [{ novicode: { $exists: false } }, { novicode: null }] },
             { $set: { novicode: "1" } }
         );
-    } catch (err) {
-        const e = err as Error;
-        console.error(`${e.message}`);
+    } catch (err: unknown) {
+        const e = err instanceof Error ? err : new Error(String(err));
+        logger.error(`onMongoConnected 失败: ${e.message}`);
     }
 };
 

@@ -14,7 +14,7 @@ interface NoviNodeMessage {
 
 // 解析后的消息内容接口
 interface ParsedMessage {
-    [key: string]: any
+    [key: string]: unknown
 }
 
 /**
@@ -121,7 +121,7 @@ class NoviNodeIPC {
     public createNewMessage(
         forUserId: string,
         event: string,
-        message: ParsedMessage
+        message: object | object[]
     ): NoviNodeMessage | null {
         try {
             const messageStr = JSON.stringify(message)

@@ -1,5 +1,5 @@
 import { Kafka, Producer, Consumer, Admin } from 'kafkajs'
-import type { Message, EachMessagePayload } from 'kafkajs'
+import type { Message, EachMessagePayload, InstrumentationEvent } from 'kafkajs'
 import logger from '../logger.js'
 
 const TOPIC = 'test-topic'
@@ -65,8 +65,8 @@ async function createProducer(): Promise<Producer> {
         producer.on(producer.events.DISCONNECT, () =>
             logger.warn('🔴 Kafka Producer 已断开')
         )
-        producer.on(producer.events.REQUEST_TIMEOUT, (e: any) =>
-            logger.warn(`⚠️ Producer 请求超时: ${e.payload.clientId}`)
+        producer.on(producer.events.REQUEST_TIMEOUT, (e: InstrumentationEvent<unknown>) =>
+            logger.warn(`⚠️ Producer 请求超时: ${(e.payload as { clientId?: string }).clientId}`)
         )
 
         await producer.connect()
@@ -109,8 +109,8 @@ async function createConsumer(): Promise<Consumer> {
         consumer.on(consumer.events.DISCONNECT, () =>
             logger.warn('🔴 Kafka Consumer 已断开')
         )
-        consumer.on(consumer.events.CRASH, (e: any) =>
-            logger.error(`💥 Kafka Consumer 崩溃: ${e.payload.error.message}`)
+        consumer.on(consumer.events.CRASH, (e: InstrumentationEvent<unknown>) =>
+            logger.error(`💥 Kafka Consumer 崩溃: ${(e.payload as { error?: Error }).error?.message ?? 'unknown'}`)
         )
         consumer.on(consumer.events.HEARTBEAT, () =>
             logger.debug(`💓 Kafka Consumer Heartbeat @ ${new Date().toISOString()}`)

@@ -36,7 +36,7 @@ const loginHandler: RequestHandler = async (req: IRequest, res: Response): Promi
             return
         }
 
-        const userId = String((userByEmail as any)._id)
+        const userId = String(userByEmail._id)
         const newToken = signToken(userId)
 
         // 保存 token 到 redis，带 TTL
@@ -48,9 +48,10 @@ const loginHandler: RequestHandler = async (req: IRequest, res: Response): Promi
             userName: userByEmail.userName,
             email: userByEmail.email,
         })
-    } catch (err: any) {
-        logger.error(`${err.message}`);
-        res.status(500).json({ message: `${err.message}` });
+    } catch (err: unknown) {
+        const e = err instanceof Error ? err.message : String(err);
+        logger.error(`${e}`);
+        res.status(500).json({ message: '内部错误' });
     }
 };
 router.post('/login', middlewareValidate(postLoginSchema), loginHandler);
@@ -68,9 +69,10 @@ const logoutHandler: RequestHandler = async (req: IRequest, res: Response): Prom
 
         await redisClient.del(`user:auth:${_id}`);
         res.status(200).json({ message: '成功登出' });
-    } catch (err: any) {
-        logger.error(`${err.message}`);
-        res.status(500).json({ message: `${err.message}` });
+    } catch (err: unknown) {
+        const e = err instanceof Error ? err.message : String(err);
+        logger.error(`${e}`);
+        res.status(500).json({ message: '内部错误' });
     }
 }
 router.get('/logout', middlewareAuth, logoutHandler);
@@ -89,9 +91,10 @@ const heartbeatHandler: RequestHandler = async (req: IRequest, res: Response): P
         }
 
         res.status(401).json({ message: 'Token已失效' });
-    } catch (err: any) {
-        logger.error(`${err.message}`);
-        res.status(500).json({ message: `${err.message}` });
+    } catch (err: unknown) {
+        const e = err instanceof Error ? err.message : String(err);
+        logger.error(`${e}`);
+        res.status(500).json({ message: '内部错误' });
     }
 }
 

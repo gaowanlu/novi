@@ -1,6 +1,6 @@
 interface NoviUser {
     _id: string
-    [key: string]: any
+    [key: string]: unknown
 }
 
 export type { NoviUser };

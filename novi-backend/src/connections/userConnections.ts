@@ -1,4 +1,6 @@
 import { Server, Socket } from 'socket.io'
+import type { ServerOptions } from 'socket.io'
+import type { Server as HttpServer } from 'http'
 import logger from '../logger.js';
 import { redisClient } from "../db/dbRedis.js";
 import { verifyToken } from '../config/jwt.js';
@@ -21,7 +23,7 @@ class UserConnections {
      * 初始化 Socket.IO 服务器
      * @param httpServer - HTTP 服务器实例
      */
-    public init(httpServer: any): void {
+    public init(httpServer: HttpServer): void {
         this.socketIOServer = new Server(httpServer, {
             path: '/api/ws',
             cors: {
@@ -47,7 +49,7 @@ class UserConnections {
                     return next(new Error('认证信息不匹配'));
                 }
                 // 最小的类型保护：必须包含_id且为string
-                if (!("_id" in decodedRaw) || typeof (decodedRaw as any)._id !== "string") {
+                if (!("_id" in decodedRaw) || typeof decodedRaw._id !== "string") {
                     return next(new Error("认证信息不匹配"));
                 }
 

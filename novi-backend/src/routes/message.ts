@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { RequestHandler, Response } from 'express';
 import type { IRequest } from '../comm/request.js';
 import { FriendRequest, FriendMessage } from '../models/mongoModel.js';
+import type { IFriendMessage } from '../models/mongoModel.js';
 import Joi from 'joi';
 import middlewareValidate from '../middlewares/middlewareValidate.js';
 import middlewareAuth from '../middlewares/middlewareAuth.js';
@@ -55,7 +56,7 @@ const postFriendMessagHandler: RequestHandler = async (req: IRequest, res: Respo
         // 后端分配 seq：读当前 (sender,receiver,noviCode) 最大序号 +1。
         // 并发下可能撞唯一索引 (sender,receiver,noviCode,seq)，冲突则重读重试。
         const MAX_RETRY = 5;
-        let savedMessage: any = null;
+        let savedMessage: IFriendMessage | null = null;
         for (let attempt = 0; attempt < MAX_RETRY && !savedMessage; attempt++) {
             const last = await FriendMessage.findOne(
                 { sender: myUserId, receiver, noviCode },
@@ -79,9 +80,9 @@ const postFriendMessagHandler: RequestHandler = async (req: IRequest, res: Respo
                     sentAt: new Date(),
                 });
                 savedMessage = await newFriendMessage.save();
-            } catch (saveErr: any) {
+            } catch (saveErr: unknown) {
                 // 唯一索引冲突（E11000）→ 重试；其它错误直接抛出
-                if (saveErr?.code === 11000) continue;
+                if (saveErr instanceof Error && (saveErr as { code?: number }).code === 11000) continue;
                 throw saveErr;
             }
         }
@@ -104,9 +105,10 @@ const postFriendMessagHandler: RequestHandler = async (req: IRequest, res: Respo
 
         res.status(200).json(savedMessage);
         return
-    } catch (err: any) {
-        logger.error(`${err.message}`);
-        res.status(500).json({ message: err.message });
+    } catch (err: unknown) {
+        const e = err instanceof Error ? err.message : String(err);
+        logger.error(`${e}`);
+        res.status(500).json({ message: '内部错误' });
         return
     }
 };
@@ -135,7 +137,9 @@ const getMessageAllFriendHandler: RequestHandler = async (req: IRequest, res: Re
                 // 旧代次密文用新密钥无法解密；留在汇总里会虚增未读数与预览）
                 $lookup: {
                     from: 'friendRequests',
-                    let: { sid: '$_id', myId: myObjectId },
+                    // sid = 消息的发送者（对方账号），与 myId 一起用于匹配「我」与该 sender 之间的当前好友申请。
+                    // 之前误用 '$_id'（消息自身 _id）导致 $expr $eq 永远不成立、代次隔离过滤失效。
+                    let: { sid: '$sender', myId: myObjectId },
                     pipeline: [
                         {
                             $match: {
@@ -206,9 +210,10 @@ const getMessageAllFriendHandler: RequestHandler = async (req: IRequest, res: Re
             }
         ]);
         res.status(200).json(unreadMessages);
-    } catch (err: any) {
-        logger.error(`${err.message}`);
-        res.status(500).json({ message: err.message });
+    } catch (err: unknown) {
+        const e = err instanceof Error ? err.message : String(err);
+        logger.error(`${e}`);
+        res.status(500).json({ message: '内部错误' });
     }
 };
 router.get('/allfriend', middlewareAuth, getMessageAllFriendHandler);
@@ -231,7 +236,11 @@ const getMessagePullUnreadByFriendHandler: RequestHandler = async (req: IRequest
 
         // 会话是双向的：既要「对方发给我」，也要「我发给对方」。
         // 参数名 sender 实际指「会话对端」，这里统一用 $or 覆盖两个方向。
-        const conversationFilter: Record<string, any> = {
+        type ConversationFilter = {
+            $or: { sender: mongoose.Types.ObjectId; receiver: mongoose.Types.ObjectId }[];
+            noviCode?: string;
+        };
+        const conversationFilter: ConversationFilter = {
             $or: [
                 { sender: senderId, receiver: myObjectId },
                 { sender: myObjectId, receiver: senderId }
@@ -301,9 +310,10 @@ const getMessagePullUnreadByFriendHandler: RequestHandler = async (req: IRequest
 
         res.status(200).json(all);
         return
-    } catch (err: any) {
-        logger.error(`${err.message}`);
-        res.status(500).json({ message: err.message });
+    } catch (err: unknown) {
+        const e = err instanceof Error ? err.message : String(err);
+        logger.error(`${e}`);
+        res.status(500).json({ message: '内部错误' });
     }
 };
 
@@ -363,9 +373,10 @@ const putMessageMarkreadedHandler = async (req: IRequest, res: Response): Promis
             unreadMessages: unreadMessages
         });
         return
-    } catch (err: any) {
-        logger.error(`markreaded error: ${err.message}`);
-        res.status(500).json({ message: err.message });
+    } catch (err: unknown) {
+        const e = err instanceof Error ? err.message : String(err);
+        logger.error(`markreaded error: ${e}`);
+        res.status(500).json({ message: '内部错误' });
     }
 };
 router.put('/markreaded',
@@ -421,9 +432,10 @@ const putMessageCryptoAckHandler = async (req: IRequest, res: Response): Promise
             unAckMessages: unAckMessages
         });
         return
-    } catch (err: any) {
-        logger.error(`markreaded error: ${err.message}`);
-        res.status(500).json({ message: err.message });
+    } catch (err: unknown) {
+        const e = err instanceof Error ? err.message : String(err);
+        logger.error(`markreaded error: ${e}`);
+        res.status(500).json({ message: '内部错误' });
     }
 };
 router.put('/crypto/ack',

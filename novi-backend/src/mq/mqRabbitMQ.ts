@@ -16,14 +16,14 @@ function createHeartbeatProducer(): void {
         return
     }
 
-    amqp.connect(RABBITMQ_URI, (err: any, connection: amqp.Connection): void => {
+    amqp.connect(RABBITMQ_URI, (err: Error | null, connection: amqp.Connection): void => {
         if (err) {
             logger.error(`[RabbitMQ]${QUEUE_HEARTBEAT} 生产者连接失败: ${err.message}`)
             setTimeout(createHeartbeatProducer, RECONNECT_DELAY)
             return
         }
 
-        connection.on('error', (err: any): void => {
+        connection.on('error', (err: Error): void => {
             logger.error(`[RabbitMQ]${QUEUE_HEARTBEAT} 生产者连接错误: ${err.message}`)
         })
 
@@ -32,7 +32,7 @@ function createHeartbeatProducer(): void {
             setTimeout(createHeartbeatProducer, RECONNECT_DELAY)
         })
 
-        connection.createChannel((error1: any, channel: amqp.Channel): void => {
+        connection.createChannel((error1: Error | null, channel: amqp.Channel): void => {
             if (error1) {
                 logger.error(`[RabbitMQ]${QUEUE_HEARTBEAT} 创建生产通道失败: ${error1.message}`)
                 return
@@ -57,14 +57,14 @@ function createHeartbeatConsumer(): void {
         return
     }
 
-    amqp.connect(RABBITMQ_URI, (err: any, connection: amqp.Connection): void => {
+    amqp.connect(RABBITMQ_URI, (err: Error | null, connection: amqp.Connection): void => {
         if (err) {
             logger.error(`[RabbitMQ]${QUEUE_HEARTBEAT} 消费者连接失败: ${err.message}`)
             setTimeout(createHeartbeatConsumer, RECONNECT_DELAY)
             return
         }
 
-        connection.on('error', (err): void => {
+        connection.on('error', (err: Error): void => {
             logger.error(`[RabbitMQ]${QUEUE_HEARTBEAT} 消费者连接错误: ${err.message}`)
         })
 
@@ -73,7 +73,7 @@ function createHeartbeatConsumer(): void {
             setTimeout(createHeartbeatConsumer, RECONNECT_DELAY)
         })
 
-        connection.createChannel((error1: any, channel: amqp.Channel): void => {
+        connection.createChannel((error1: Error | null, channel: amqp.Channel): void => {
             if (error1) {
                 logger.error(`[RabbitMQ]${QUEUE_HEARTBEAT} 创建消费通道失败: ${error1.message}`)
                 return
@@ -113,7 +113,7 @@ let rabbitMQNoviNodeChannel: RabbitNoviNodeChannel = {
             return
         }
 
-        amqp.connect(RABBITMQ_URI, (err: any, connection: amqp.Connection): void => {
+        amqp.connect(RABBITMQ_URI, (err: Error | null, connection: amqp.Connection): void => {
             if (err) {
                 logger.error(`[RabbitMQ]${QUEUE_IPC} 生产者连接失败: ${err?.message ?? 'unknown'}`)
                 this.producerChannel = null
@@ -121,7 +121,7 @@ let rabbitMQNoviNodeChannel: RabbitNoviNodeChannel = {
                 return
             }
 
-            connection.on('error', (err): void => {
+            connection.on('error', (err: Error): void => {
                 logger.error(`[RabbitMQ]${QUEUE_IPC} 生产者连接错误: ${err.message}`)
                 this.producerChannel = null;
             })
@@ -134,7 +134,7 @@ let rabbitMQNoviNodeChannel: RabbitNoviNodeChannel = {
                 }, RECONNECT_DELAY)
             })
 
-            connection.createChannel((error1: any, channel: amqp.Channel): void => {
+            connection.createChannel((error1: Error | null, channel: amqp.Channel): void => {
                 if (error1) {
                     logger.error(`[RabbitMQ]${QUEUE_IPC} 创建生产通道失败: ${error1.message}`)
                     return
@@ -161,14 +161,14 @@ let rabbitMQNoviNodeChannel: RabbitNoviNodeChannel = {
             return
         }
 
-        amqp.connect(RABBITMQ_URI, (err: any, connection: amqp.Connection): void => {
+        amqp.connect(RABBITMQ_URI, (err: Error | null, connection: amqp.Connection): void => {
             if (err || !connection) {
                 logger.error(`[RabbitMQ]${QUEUE_IPC} 消费者连接失败: ${err?.message ?? 'unknown'}`)
                 setTimeout((): void => this.initConsumerChannel(), RECONNECT_DELAY)
                 return
             }
 
-            connection.on('error', (err): void => {
+            connection.on('error', (err: Error): void => {
                 logger.error(`[RabbitMQ]${QUEUE_IPC} 消费者连接错误: ${err.message}`)
             })
 
@@ -179,7 +179,7 @@ let rabbitMQNoviNodeChannel: RabbitNoviNodeChannel = {
                 }, RECONNECT_DELAY);
             })
 
-            connection.createChannel((error1: any, channel: amqp.Channel) => {
+            connection.createChannel((error1: Error | null, channel: amqp.Channel): void => {
                 if (error1) {
                     logger.error(`[RabbitMQ]${QUEUE_IPC} 创建消费通道失败: ${error1?.message ?? 'unknown'}`)
                     return

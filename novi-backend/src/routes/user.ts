@@ -2,6 +2,7 @@ import { Router } from 'express'
 import type { RequestHandler, Response } from 'express'
 import type { IRequest } from '../comm/request.js';
 import { User, FriendRequest } from '../models/mongoModel.js';
+import type { IUser } from '../models/mongoModel.js';
 import Joi from 'joi';
 import middlewareValidate from '../middlewares/middlewareValidate.js';
 import middlewareAuth from '../middlewares/middlewareAuth.js';
@@ -50,9 +51,10 @@ const postUserHandler: RequestHandler = async (req: IRequest, res: Response): Pr
         }
 
         res.status(200).json(resultUser.toJSON());
-    } catch (err: any) {
-        logger.error(`${err.message}`);
-        res.status(500).json({ message: err.message });
+    } catch (err: unknown) {
+        const e = err instanceof Error ? err.message : String(err);
+        logger.error(`${e}`);
+        res.status(500).json({ message: '内部错误' });
     }
 };
 router.post('/',
@@ -75,14 +77,15 @@ router.get('/getAll',
                 '$receiver',
                 { requester: myUserId }
             );
-            const ids = [...new Set([...relatedIds, ...relatedIds2])].filter((id: any) => String(id) !== myUserId);
+            const ids = [...new Set([...relatedIds, ...relatedIds2])].filter((id: unknown) => String(id) !== myUserId);
             const users = ids.length
                 ? await User.find({ _id: { $in: ids } }).select('_id userName')
                 : [];
             res.status(200).json(users);
-        } catch (err: any) {
-            logger.error(`${err.message}`);
-            res.status(500).json({ message: err.message });
+        } catch (err: unknown) {
+            const e = err instanceof Error ? err.message : String(err);
+            logger.error(`${e}`);
+            res.status(500).json({ message: '内部错误' });
         }
     }
 );
@@ -96,7 +99,7 @@ const postUserFindHandler: RequestHandler = async (req: IRequest, res: Response)
     try {
         const { userName, _id } = req.body;
 
-        const conditions: any[] = [];
+        const conditions: { _id?: string; userName?: string }[] = [];
         if (_id && _id.trim() !== '') {
             conditions.push({ _id });
         }
@@ -111,9 +114,10 @@ const postUserFindHandler: RequestHandler = async (req: IRequest, res: Response)
         const users = await User.find(conditions.length > 0 ? { $or: conditions } : {}).select('_id userName');
 
         res.status(200).json(users);
-    } catch (err: any) {
-        logger.error(`${err.message}`);
-        res.status(500).json({ message: err.message });
+    } catch (err: unknown) {
+        const e = err instanceof Error ? err.message : String(err);
+        logger.error(`${e}`);
+        res.status(500).json({ message: '内部错误' });
     }
 };
 router.post('/find',
@@ -139,11 +143,14 @@ router.post('/delete',
     middlewareValidate(postUserDeleteSchema),
     async (req: IRequest, res: Response): Promise<void> => {
         try {
-            const { userName, email, _id } = req.body;
-            // 仅允许删除「自己」：匹配条件必须命中当前登录用户，否则会越权删除他人账号
             const myUserId = req.noviUser?._id;
-            const selfMatch: any = { $or: [{ userName }, { email }, { _id }] };
-            selfMatch._id = myUserId; // 强制限定到当前用户
+            if (!myUserId) {
+                res.status(401).json({ message: '未登录' });
+                return
+            }
+            // 仅允许删除「自己」：匹配条件必须命中当前登录用户，否则会越权删除他人账号。
+            // 直接用 _id 精确匹配，不再用 $or 兜底（空字符串条件在 Mongo 中是 falsy 匹配，易误读）。
+            const selfMatch: { _id: string } = { _id: myUserId };
 
             const users = await User.find(selfMatch).select('_id userName email');
 
@@ -154,9 +161,10 @@ router.post('/delete',
 
             await User.deleteOne(selfMatch);
             res.status(200).json(users);
-        } catch (err: any) {
-            logger.error(`${err.message}`);
-            res.status(500).json({ message: err.message });
+        } catch (err: unknown) {
+            const e = err instanceof Error ? err.message : String(err);
+            logger.error(`${e}`);
+            res.status(500).json({ message: '内部错误' });
         }
     }
 );
@@ -188,9 +196,10 @@ router.put('/',
             ).select('_id userName email'); // upsert 没有则不要进行插入
 
             res.status(200).json(updatedUser);
-        } catch (err: any) {
-            logger.error(`${err.message}`);
-            res.status(500).json({ message: err.message });
+        } catch (err: unknown) {
+            const e = err instanceof Error ? err.message : String(err);
+            logger.error(`${e}`);
+            res.status(500).json({ message: '内部错误' });
         }
     }
 );

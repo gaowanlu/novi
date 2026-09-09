@@ -103,7 +103,7 @@ function setupGracefulShutdown(httpServer: http.Server): void {
             // 1) 停止接受新 HTTP 连接，等待在途请求结束
             httpServer.close(() => logger.info('HTTP 服务已停止'));
             // 2) 关闭 Socket.IO（踢掉所有在线 socket，触发 onDisconnect 清理 redis 在线态）
-            (userConnections as any).socketIOServer?.close?.();
+            userConnections.socketIOServer?.close?.();
             // 3) 各数据库连接
             await Promise.allSettled([
                 disconnectMongo().catch((e) => logger.error(`Mongo 断开失败: ${e.message}`)),

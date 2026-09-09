@@ -1,21 +1,24 @@
 import winston from 'winston'
 import 'winston-daily-rotate-file'
 import path from 'path'
-import type { Logger } from 'winston'
+import type { Logger, Logform } from 'winston'
+
+// 扩展 TransformableInfo，携带自定义的 location 字段（文件:行号）
+type LogInfo = Logform.TransformableInfo & { location?: string }
 
 /**
  * 自定义格式：带文件与行号
  * 在开发环境中显示日志所在的文件位置和行号
  */
-const callerInfo: winston.Logform.FormatWrap = winston.format((
-    info: winston.Logform.TransformableInfo,
-): winston.Logform.TransformableInfo => {
+const callerInfo: Logform.FormatWrap = winston.format((
+    info: Logform.TransformableInfo,
+): Logform.TransformableInfo => {
     const stack = new Error().stack?.split('\n')[10]
     if (stack) {
         const match = stack.match(/\((.*):(\d+):(\d+)\)/)
         if (match) {
             const filePath: string = path.relative(process.cwd(), match[1]);
-            (info as any).location = `${filePath}:${match[2]}`
+            (info as LogInfo).location = `${filePath}:${match[2]}`
         }
     }
     return info
@@ -24,8 +27,8 @@ const callerInfo: winston.Logform.FormatWrap = winston.format((
 /**
  * 日志输出格式定义
  */
-const logFormat: winston.Logform.Format = winston.format.printf((info: winston.Logform.TransformableInfo): string => {
-    const { timestamp, level, message, location } = info as any
+const logFormat: Logform.Format = winston.format.printf((info: Logform.TransformableInfo): string => {
+    const { timestamp, level, message, location } = info as LogInfo
     return `[${timestamp}] ${level.toUpperCase()}${location ? ` (${location})` : ''}: ${message}`
 })
 

@@ -28,9 +28,10 @@ const postOrderHandler: RequestHandler = async (req: Request, res: Response): Pr
 
         const order: Order = await createOrder(user_id, amount)
         res.status(201).json(order)
-    } catch (err: any) {
-        logger.error(`创建订单失败: ${err.message}`)
-        res.status(500).json({ message: err.message })
+    } catch (err: unknown) {
+        const e = err instanceof Error ? err.message : String(err);
+        logger.error(`创建订单失败: ${e}`)
+        res.status(500).json({ message: '内部错误' })
     }
 }
 router.post('/', middlewareValidate(postOrderSchema), postOrderHandler)
@@ -55,9 +56,10 @@ const getOrderHandler: RequestHandler = async (req: Request, res: Response): Pro
 
         const orders: Order[] = await selectOrderByUserId(user_id)
         res.status(200).json(orders)
-    } catch (err: any) {
-        logger.error(`查询订单失败: ${err.message}`)
-        res.status(500).json({ message: err.message })
+    } catch (err: unknown) {
+        const e = err instanceof Error ? err.message : String(err);
+        logger.error(`查询订单失败: ${e}`)
+        res.status(500).json({ message: '内部错误' })
     }
 };
 router.get('/', middlewareValidate(getOrderSchema, 'query'), getOrderHandler);
@@ -89,9 +91,10 @@ const deleteOrderHandler: RequestHandler = async (req: Request, res: Response): 
 
         const deleted = await deleteOrderByIdAndUserId(orderId, user_id)
         res.status(200).json(deleted)
-    } catch (err: any) {
-        logger.error(`删除订单失败: ${err.message}`)
-        res.status(500).json({ message: err.message })
+    } catch (err: unknown) {
+        const e = err instanceof Error ? err.message : String(err);
+        logger.error(`删除订单失败: ${e}`)
+        res.status(500).json({ message: '内部错误' })
     }
 };
 
