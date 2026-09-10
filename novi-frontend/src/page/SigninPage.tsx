@@ -91,6 +91,7 @@ function SigninPage() {
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
+                            minLength={8}
                             autoComplete="current-password"
                             required
                         />

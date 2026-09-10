@@ -55,8 +55,9 @@ const postUserHandler: RequestHandler = async (req: IRequest, res: Response): Pr
     } catch (err: unknown) {
         const e = err instanceof Error ? err : null;
         if (e && (e as any).code === 11000) {
-            const key = (e as any).keyValue?.userName ? '用户名已被占用' : '邮箱已被注册';
-            res.status(400).json({ message: key });
+            const keys = Object.keys((e as any).keyValue ?? {});
+            const message = keys.includes('email') ? '邮箱已被注册' : '用户名已被占用';
+            res.status(400).json({ message });
             return
         }
         const msg = e ? e.message : String(err);
@@ -206,8 +207,9 @@ router.put('/',
         } catch (err: unknown) {
             const e = err instanceof Error ? err : null;
             if (e && (e as any).code === 11000) {
-                const key = (e as any).keyValue?.userName ? '用户名已被占用' : '邮箱已被注册';
-                res.status(400).json({ message: key });
+                const keys = Object.keys((e as any).keyValue ?? {});
+                const message = keys.includes('email') ? '邮箱已被注册' : '用户名已被占用';
+                res.status(400).json({ message });
                 return
             }
             const msg = e ? e.message : String(err);
@@ -242,9 +244,11 @@ router.put('/password',
                 return;
             }
 
-            // 1) 校验旧密码（sha256(oldPw + salt) 须等于存储的 hash）
+            // 1) 校验旧密码（sha256(oldPw + salt) 须等于存储的 hash）；恒定时间比较防计时攻击
             const expected = crypto.createHash('sha256').update(oldPassword + user.passwordSalt).digest('hex');
-            if (expected !== user.password) {
+            const expectedBuf = Buffer.from(expected);
+            const storedBuf = Buffer.from(user.password ?? '');
+            if (expectedBuf.length !== storedBuf.length || !crypto.timingSafeEqual(expectedBuf, storedBuf)) {
                 res.status(400).json({ message: '当前密码不正确' });
                 return;
             }
