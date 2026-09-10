@@ -1,12 +1,13 @@
 import logger from '../logger.js'
-import { noviNodeIPC } from '../mq/noviNodeIPC.js'
+import { noviNodeIPC, type NoviNodeMessage } from '../mq/noviNodeIPC.js'
 import { redisClient } from '../db/dbRedis.js'
 import type { RedisClientType } from 'redis'
 
 /**
  * 推送消息给一组在线用户
- * 流程：批量读 redis 取各用户在线所在节点（一次 pipeline）-> 按节点去重 -> 通过节点间消息队列发往对应节点 -> 由该节点推送给本地 socket
- * 离线用户静默跳过；单个用户推送失败不影响其它用户
+ * 流程：批量读 redis 取各用户在线所在节点（一次 multi）-> 按目标节点分组（每节点一条 IPC，
+ * 携带该节点上的在线用户列表）-> 发往各节点 -> 由该节点向列表内每个用户 fan-out 到本地 socket
+ * 离线用户静默跳过；单个用户/节点推送失败不影响其它
  * @param userIds - 目标用户ID列表（内部先去重，调用方可直接传 flatMap 产生的含重复数组）
  * @param event - Socket.IO 事件名
  * @param message - 推送内容（对象或数组，经 JSON 序列化后随节点消息传输）
@@ -25,19 +26,26 @@ export async function pushToUsers(userIds: string[], event: string, message: obj
     }
     const results = (await multi.exec()) as unknown as (string | null)[];
 
-    // 按目标节点去重：同一节点只发一条 IPC（该节点自行 fan-out 到本地 socket）
-    const targetNodes = new Set<string>();
+    // 按目标节点分组：同一节点只发一条 IPC，但携带该节点上【全部】在线用户——
+    // 接收端对列表内每个用户各自 emit。单 forUserId 会丢失其余用户（回归点）。
+    const nodeToUsers = new Map<string, string[]>();
     for (let i = 0; i < unique.length; i++) {
         const node = results[i];
         if (!node) continue; // 离线用户静默跳过
-        targetNodes.add(node);
+        const list = nodeToUsers.get(node);
+        if (list) list.push(unique[i]);
+        else nodeToUsers.set(node, [unique[i]]);
     }
-    if (targetNodes.size === 0) return;
+    if (nodeToUsers.size === 0) return;
 
-    const msg = noviNodeIPC.createNewMessage(unique[0], event, message);
-    if (!msg) return;
-
-    await Promise.allSettled([...targetNodes].map((node) => {
+    await Promise.allSettled([...nodeToUsers.entries()].map(([node, users]) => {
+        const msg: NoviNodeMessage = {
+            fromNode: process.env.NOVI_NODE || 'unknown',
+            forUserIds: users,
+            event,
+            message: JSON.stringify(message),
+            timestamp: Date.now(),
+        };
         noviNodeIPC.sendToNode(node, msg);
     }));
 }

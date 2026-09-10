@@ -4,9 +4,12 @@ import logger from '../logger.js'
 import { userConnections } from '../connections/userConnections.js'
 
 // 节点间通信消息接口
+// forUserIds 为多用户列表（push 按节点分组后携带该节点上全部在线用户）；
+// 接收端对列表内每个用户各自 emit。兼容在途的单值 forUserId（旧消息）。
 interface NoviNodeMessage {
     fromNode: string
-    forUserId: string
+    forUserIds?: string[]
+    forUserId?: string
     event: string
     message: string
     timestamp: number
@@ -67,8 +70,10 @@ class NoviNodeIPC {
 
         try {
             const json: NoviNodeMessage = JSON.parse(rawMsg)
-            // 验证消息格式
-            if (!json?.fromNode || !json?.event || !json?.message) {
+            // 验证消息格式：forUserIds 与 forUserId 至少其一（兼容在途旧消息）
+            const hasTarget = (Array.isArray(json?.forUserIds) && json.forUserIds.length > 0)
+                || (typeof json?.forUserId === 'string' && json.forUserId.length > 0);
+            if (!json?.fromNode || !json?.event || !json?.message || !hasTarget) {
                 logger.warn(`[noviNodeIPC] 收到格式异常的消息: ${rawMsg}`)
                 return
             }
@@ -83,8 +88,12 @@ class NoviNodeIPC {
                 message = { raw: json.message } // 作为字符串封装
             }
 
-            // 分发到上层处理
-            this.msgFromNoviNode(json.fromNode, json.forUserId, json.event, message)
+            // 分发到上层处理：forUserIds 优先（多用户 fan-out），否则回退单值 forUserId（在途旧消息）
+            if (json.forUserIds && json.forUserIds.length > 0) {
+                this.msgFromNoviNode(json.fromNode, json.forUserIds, json.event, message)
+            } else if (json.forUserId) {
+                this.msgFromNoviNode(json.fromNode, json.forUserId, json.event, message)
+            }
 
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : '未知错误'
@@ -142,25 +151,28 @@ class NoviNodeIPC {
     /**
      * 处理来自其他节点的消息
      * @param fromNode - 来源节点ID
-     * @param forUserId - 目标用户ID
+     * @param forUserId - 目标用户ID（单个或该节点上的用户列表）
      * @param event - 事件名称
      * @param message - 消息内容
      */
     private msgFromNoviNode(
         fromNode: string,
-        forUserId: string,
+        forUserId: string | string[],
         event: string,
         message: ParsedMessage
     ): void {
         try {
+            const ids = Array.isArray(forUserId) ? forUserId : [forUserId];
             logger.info(
-                `[noviNodeIPC] 收到来自节点 ${fromNode} 的消息 | forUserId=${forUserId} | event=${event} | 内容=${JSON.stringify(
+                `[noviNodeIPC] 收到来自节点 ${fromNode} 的消息 | 目标用户数=${ids.length} | event=${event} | 内容=${JSON.stringify(
                     message
                 )}`
             );
 
-            // 将消息分发给目标用户
-            userConnections.eventMessageForClientByUserId(forUserId, event, message)
+            // 向每个目标用户各自分发（单 socket emit）
+            for (const uid of ids) {
+                userConnections.eventMessageForClientByUserId(uid, event, message)
+            }
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : '未知错误'
             logger.error(`[noviNodeIPC] msgFromNoviNode 处理出错: ${errorMessage}`)
@@ -168,6 +180,7 @@ class NoviNodeIPC {
     }
 };
 
-// 导出单例
+// 导出单例与消息类型
 export const noviNodeIPC = new NoviNodeIPC()
 export default noviNodeIPC
+export type { NoviNodeMessage }
