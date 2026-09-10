@@ -43,7 +43,7 @@ function UserInfoPage() {
     const [clearOpen, setClearOpen] = useState(false);
     const importFileRef = useRef<HTMLInputElement>(null);
 
-    const { updateEmailAndUserName } = useAuth();
+    const { updateEmailAndUserName, logout } = useAuth();
     const { status: vaultStatus, hasPassword, changePassword, lock } = useVault();
     const user = useSessionUser();
 
@@ -52,6 +52,12 @@ function UserInfoPage() {
     const [newPw, setNewPw] = useState('');
     const [confirmPw, setConfirmPw] = useState('');
     const [pwBusy, setPwBusy] = useState(false);
+
+    const [loginPwOpen, setLoginPwOpen] = useState(false);
+    const [loginOldPw, setLoginOldPw] = useState('');
+    const [loginNewPw, setLoginNewPw] = useState('');
+    const [loginConfirmPw, setLoginConfirmPw] = useState('');
+    const [loginPwBusy, setLoginPwBusy] = useState(false);
 
     const handleImportKeys = () => importFileRef.current?.click();
 
@@ -87,6 +93,37 @@ function UserInfoPage() {
             toast.error(err instanceof Error ? (err.message || '修改失败') : '修改失败');
         } finally {
             setPwBusy(false);
+        }
+    };
+
+    const handleChangeLoginPw = async () => {
+        if (loginNewPw.length < 8) {
+            toast.error('新密码至少 8 个字符');
+            return;
+        }
+        if (loginNewPw !== loginConfirmPw) {
+            toast.error('两次输入的新密码不一致');
+            return;
+        }
+        setLoginPwBusy(true);
+        try {
+            const res = await apiFetch(APIMacro.PUTUSERPASSWORD, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ oldPassword: loginOldPw, newPassword: loginNewPw })
+            });
+            const raw = await parseJson(res);
+            if (res.ok) {
+                // 后端已删除当前 token，清本地会话并跳登录页
+                toast.success('密码修改成功', { description: '请用新密码重新登录' });
+                logout();
+            } else {
+                toast.error('修改失败', { description: errorText(res, raw as ApiError | null) });
+                setLoginPwBusy(false);
+            }
+        } catch (err: unknown) {
+            toast.error('网络错误', { description: err instanceof Error ? err.message : undefined });
+            setLoginPwBusy(false);
         }
     };
 
@@ -208,6 +245,76 @@ function UserInfoPage() {
                         {loading ? '保存中…' : '保存修改'}
                     </Button>
                 </form>
+
+                {/* 登录密码 */}
+                <div className="mt-6 flex flex-col gap-1">
+                    <div className="flex items-center gap-2 pb-1">
+                        <KeyRound className="size-4 text-muted-foreground" />
+                        <span className="text-xs font-medium text-muted-foreground">登录密码</span>
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={() => setLoginPwOpen(true)}
+                        className="flex items-center gap-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-3 text-left transition-colors hover:bg-accent/60 focus-visible:ring-ring/40 focus-visible:ring-[3px] focus-visible:border-ring outline-none"
+                    >
+                        <KeyRound data-icon="inline-start" className="size-5 shrink-0 text-muted-foreground" />
+                        <span className="flex-1 text-sm">修改登录密码</span>
+                        <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                    </button>
+
+                    <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                        登录密码用于账号登录。修改成功后当前会话立即退出，请用新密码重新登录。
+                    </p>
+
+                    <AlertDialog open={loginPwOpen} onOpenChange={setLoginPwOpen}>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>修改登录密码</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    请输入当前密码和新密码。修改成功后将退出当前会话，请用新密码重新登录。
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <div className="flex flex-col gap-3 py-2">
+                                <div className="flex flex-col gap-1.5">
+                                    <Label htmlFor="login-old-pw">当前密码</Label>
+                                    <Input
+                                        id="login-old-pw"
+                                        type="password"
+                                        value={loginOldPw}
+                                        onChange={e => setLoginOldPw(e.target.value)}
+                                        autoFocus
+                                    />
+                                </div>
+                                <div className="flex flex-col gap-1.5">
+                                    <Label htmlFor="login-new-pw">新密码（至少 8 位）</Label>
+                                    <Input
+                                        id="login-new-pw"
+                                        type="password"
+                                        value={loginNewPw}
+                                        onChange={e => setLoginNewPw(e.target.value)}
+                                    />
+                                </div>
+                                <div className="flex flex-col gap-1.5">
+                                    <Label htmlFor="login-confirm-pw">确认新密码</Label>
+                                    <Input
+                                        id="login-confirm-pw"
+                                        type="password"
+                                        value={loginConfirmPw}
+                                        onChange={e => setLoginConfirmPw(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>取消</AlertDialogCancel>
+                                <Button onClick={handleChangeLoginPw} disabled={loginPwBusy}>
+                                    {loginPwBusy && <Loader2 data-icon="inline-start" className="animate-spin" />}
+                                    {loginPwBusy ? '修改中…' : '确认修改'}
+                                </Button>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                </div>
 
                 {vaultStatus !== 'none' && (
                     <>

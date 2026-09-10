@@ -8,6 +8,7 @@ import middlewareValidate from '../middlewares/middlewareValidate.js';
 import middlewareAuth from '../middlewares/middlewareAuth.js';
 import logger from '../logger.js';
 import crypto from 'crypto'
+import { redisClient } from '../db/dbRedis.js';
 
 const router = Router();
 
@@ -211,6 +212,59 @@ router.put('/',
             }
             const msg = e ? e.message : String(err);
             logger.error(`${msg}`);
+            res.status(500).json({ message: '内部错误' });
+        }
+    }
+);
+
+// PUT user/password 修改登录密码：校验旧密码 → 换全新 salt+hash → 删当前 token 强制重登。
+// 换 salt（而非只换 hash）：同密码不同账户的 salt 不同，避免同 hash 关联。
+// 删 redis token 后，Redis 等值校验失效，该用户所有现存会话立即作废（与 logout 同源机制）。
+const putUserPasswordSchema = Joi.object({
+    oldPassword: Joi.string().trim().min(8).max(20).required(),
+    newPassword: Joi.string().trim().min(8).max(20).required()
+});
+router.put('/password',
+    middlewareAuth,
+    middlewareValidate(putUserPasswordSchema),
+    async (req: IRequest, res: Response): Promise<void> => {
+        const myUserId = req.noviUser?._id;
+        if (!myUserId) {
+            res.status(401).json({ message: '未登录' });
+            return;
+        }
+        const { oldPassword, newPassword } = req.body as { oldPassword: string, newPassword: string };
+
+        try {
+            const user = await User.findOne({ _id: myUserId }).select('password passwordSalt');
+            if (!user) {
+                res.status(404).json({ message: '用户不存在' });
+                return;
+            }
+
+            // 1) 校验旧密码（sha256(oldPw + salt) 须等于存储的 hash）
+            const expected = crypto.createHash('sha256').update(oldPassword + user.passwordSalt).digest('hex');
+            if (expected !== user.password) {
+                res.status(400).json({ message: '当前密码不正确' });
+                return;
+            }
+
+            // 2) 生成全新随机 salt + 哈希新密码，原子写入
+            const newSalt = crypto.randomBytes(16).toString('hex');
+            const newHash = crypto.createHash('sha256').update(newPassword + newSalt).digest('hex');
+            await User.updateOne(
+                { _id: myUserId },
+                { $set: { password: newHash, passwordSalt: newSalt } }
+            );
+
+            // 3) 删当前设备 token：等值校验失效，强制重新登录
+            await redisClient.del(`user:auth:${myUserId}`);
+
+            logger.info(`用户已修改密码 ${myUserId}`);
+            res.status(200).json({ message: '密码修改成功，请重新登录' });
+        } catch (err: unknown) {
+            const e = err instanceof Error ? err.message : String(err);
+            logger.error(`${e}`);
             res.status(500).json({ message: '内部错误' });
         }
     }

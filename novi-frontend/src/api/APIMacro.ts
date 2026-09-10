@@ -8,6 +8,7 @@ const HEARTBEAT = `/api/auth/heartbeat`;
 const TOKEN_VERIFY = `/api/auth/token/verify`;
 const SIGNUP = `/api/user`;
 const PUTUSER = `/api/user`;
+const PUTUSERPASSWORD = `/api/user/password`;
 const USERFIND = `/api/user/find`;
 const GETFRIEND = `/api/friend`;
 const FRIEND_REQUEST = `/api/friend/request`;
@@ -25,6 +26,7 @@ const APIMacro = {
     TOKEN_VERIFY: `${HOST}${TOKEN_VERIFY}`, // 校验本地 token 是否仍有效
     SIGNUP: `${HOST}${SIGNUP}`, // 注册
     PUTUSER: `${HOST}${PUTUSER}`, // 修改个人信息
+    PUTUSERPASSWORD: `${HOST}${PUTUSERPASSWORD}`, // 修改登录密码
     USERFIND: `${HOST}${USERFIND}`, // 搜索用户
     GETFRIEND: `${HOST}${GETFRIEND}`, // 获取好友列表
     POSTFRIENDREQUEST: `${HOST}${FRIEND_REQUEST}`, // 申请添加新好友

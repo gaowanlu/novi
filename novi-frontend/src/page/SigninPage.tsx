@@ -80,8 +80,8 @@ function SigninPage() {
                             <button
                                 type="button"
                                 className="cursor-not-allowed text-xs text-muted-foreground/60 underline-offset-4"
-                                title="功能暂未开放"
-                                onClick={() => toast.info('忘记密码功能暂未开放')}
+                                title="请登录后前往个人信息中修改密码"
+                                onClick={() => toast.info('请登录后前往个人信息中修改密码')}
                             >
                                 忘记密码？
                             </button>
