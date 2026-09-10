@@ -9,6 +9,7 @@ import middlewareAuth from '../middlewares/middlewareAuth.js';
 import logger from '../logger.js';
 import crypto from 'crypto'
 import { redisClient } from '../db/dbRedis.js';
+import { isDuplicateKeyError } from '../models/mongoConstants.js';
 
 const router = Router();
 
@@ -53,14 +54,13 @@ const postUserHandler: RequestHandler = async (req: IRequest, res: Response): Pr
 
         res.status(200).json(resultUser.toJSON());
     } catch (err: unknown) {
-        const e = err instanceof Error ? err : null;
-        if (e && (e as any).code === 11000) {
-            const keys = Object.keys((e as any).keyValue ?? {});
+        if (isDuplicateKeyError(err)) {
+            const keys = Object.keys(err.keyValue ?? {});
             const message = keys.includes('email') ? '邮箱已被注册' : '用户名已被占用';
             res.status(400).json({ message });
             return
         }
-        const msg = e ? e.message : String(err);
+        const msg = err instanceof Error ? err.message : String(err);
         logger.error(`${msg}`);
         res.status(500).json({ message: '内部错误' });
     }
@@ -205,14 +205,13 @@ router.put('/',
 
             res.status(200).json(updatedUser);
         } catch (err: unknown) {
-            const e = err instanceof Error ? err : null;
-            if (e && (e as any).code === 11000) {
-                const keys = Object.keys((e as any).keyValue ?? {});
+            if (isDuplicateKeyError(err)) {
+                const keys = Object.keys(err.keyValue ?? {});
                 const message = keys.includes('email') ? '邮箱已被注册' : '用户名已被占用';
                 res.status(400).json({ message });
                 return
             }
-            const msg = e ? e.message : String(err);
+            const msg = err instanceof Error ? err.message : String(err);
             logger.error(`${msg}`);
             res.status(500).json({ message: '内部错误' });
         }

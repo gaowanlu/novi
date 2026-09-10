@@ -9,6 +9,7 @@ import logger from '../logger.js';
 import mongoose from 'mongoose';
 import type { PipelineStage } from 'mongoose';
 import { pushToUsers, logPushError } from '../comm/push.js';
+import { isDuplicateKeyError } from '../models/mongoConstants.js';
 
 const router = Router();
 
@@ -81,7 +82,7 @@ const postFriendRequestHandler: RequestHandler = async (
                 saveNewFriendRequest = await newFriendRequest.save();
             } catch (saveErr: unknown) {
                 // 唯一索引冲突（E11000）→ 并发竞态，重读计数重试；其它错误直接抛出
-                if (saveErr instanceof Error && (saveErr as { code?: number }).code === 11000) continue;
+                if (isDuplicateKeyError(saveErr)) continue;
                 throw saveErr;
             }
         }

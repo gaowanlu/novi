@@ -9,6 +9,7 @@ import middlewareAuth from '../middlewares/middlewareAuth.js';
 import logger from '../logger.js';
 import mongoose from 'mongoose';
 import { pushToUsers, logPushError } from '../comm/push.js';
+import { isDuplicateKeyError } from '../models/mongoConstants.js';
 
 const router = Router();
 
@@ -89,7 +90,7 @@ const postFriendMessagHandler: RequestHandler = async (req: IRequest, res: Respo
                 savedMessage = await newFriendMessage.save();
             } catch (saveErr: unknown) {
                 // 唯一索引冲突（E11000）→ 重读计数器重试；其它错误直接抛出
-                if (saveErr instanceof Error && (saveErr as { code?: number }).code === 11000) {
+                if (isDuplicateKeyError(saveErr)) {
                     const retryCounter = await MsgSeqCounter.findOneAndUpdate(
                         { sender: myUserId, receiver, noviCode },
                         { $inc: { seq: 1 } },
