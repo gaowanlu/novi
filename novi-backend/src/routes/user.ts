@@ -52,8 +52,14 @@ const postUserHandler: RequestHandler = async (req: IRequest, res: Response): Pr
 
         res.status(200).json(resultUser.toJSON());
     } catch (err: unknown) {
-        const e = err instanceof Error ? err.message : String(err);
-        logger.error(`${e}`);
+        const e = err instanceof Error ? err : null;
+        if (e && (e as any).code === 11000) {
+            const key = (e as any).keyValue?.userName ? '用户名已被占用' : '邮箱已被注册';
+            res.status(400).json({ message: key });
+            return
+        }
+        const msg = e ? e.message : String(err);
+        logger.error(`${msg}`);
         res.status(500).json({ message: '内部错误' });
     }
 };
@@ -197,8 +203,14 @@ router.put('/',
 
             res.status(200).json(updatedUser);
         } catch (err: unknown) {
-            const e = err instanceof Error ? err.message : String(err);
-            logger.error(`${e}`);
+            const e = err instanceof Error ? err : null;
+            if (e && (e as any).code === 11000) {
+                const key = (e as any).keyValue?.userName ? '用户名已被占用' : '邮箱已被注册';
+                res.status(400).json({ message: key });
+                return
+            }
+            const msg = e ? e.message : String(err);
+            logger.error(`${msg}`);
             res.status(500).json({ message: '内部错误' });
         }
     }
