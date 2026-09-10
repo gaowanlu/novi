@@ -67,8 +67,10 @@ if (EXPRESS_STATIC_PATH) {
 }
 
 async function startServer() {
-    await connectMongo();
+    // Redis 必须先于 Mongo：onMongoConnected 的启动互斥锁（SET NX）依赖 Redis 就绪，
+    // 否则 node-redis 对未连接客户端抛 ClientClosedError（"The client is closed"）拖死整个启动。
     await connectRedis();
+    await connectMongo();
     await connectPostgres();
 
     noviNodeIPC.init();

@@ -27,9 +27,6 @@ const userSchema = new mongoose.Schema<IUser>(
     }
 );
 
-userSchema.index({ userName: 1 }, { unique: true });
-userSchema.index({ email: 1 }, { unique: true });
-
 const User: Model<IUser> = mongoose.model<IUser>('user', userSchema);
 
 
@@ -246,9 +243,21 @@ const NOVI_NODE = process.env.NOVI_NODE ?? 'unknown-node';
 
 const onMongoConnected = async (): Promise<void> => {
     // 1) 抢锁（SET NX）：未抢到说明其它节点正在初始化，跳过本节点的重活。
-    const claimed = await redisClient.set(BOOTSTRAP_LOCK_KEY, NOVI_NODE, { NX: true, EX: BOOTSTRAP_LOCK_TTL_SEC });
+    //    Redis 未就绪/命令异常时【降级继续执行】（syncIndexes/回填均幂等，最坏回到无锁现状），
+    //    绝不让单点 Redis 抖动杀死整个进程启动。
+    let claimed: string | null = null;
+    try {
+        claimed = await redisClient.set(BOOTSTRAP_LOCK_KEY, NOVI_NODE, { NX: true, EX: BOOTSTRAP_LOCK_TTL_SEC });
+    } catch (lockErr: unknown) {
+        const le = lockErr instanceof Error ? lockErr.message : String(lockErr);
+        logger.warn(`onMongoConnected: 抢启动锁失败（${le}），降级为无锁执行`);
+        // 降级：不持有锁，继续执行（syncIndexes/回填幂等，回到无锁现状）
+        return;
+    }
     if (claimed !== 'OK') {
-        logger.info(`onMongoConnected: 其它节点持启动锁（${await redisClient.get(BOOTSTRAP_LOCK_KEY) ?? '?'}），本节点跳过 syncIndexes/回填`);
+        let holder = '?';
+        try { holder = (await redisClient.get(BOOTSTRAP_LOCK_KEY)) ?? '?'; } catch { /* 保持 '?' */ }
+        logger.info(`onMongoConnected: 其它节点持启动锁（${holder}），本节点跳过 syncIndexes/回填`);
         return;
     }
 
