@@ -1,7 +1,6 @@
 import logger from '../logger.js'
 import { noviNodeIPC, type NoviNodeMessage } from '../mq/noviNodeIPC.js'
 import { redisClient } from '../db/dbRedis.js'
-import type { RedisClientType } from 'redis'
 
 /**
  * 推送消息给一组在线用户
@@ -18,12 +17,13 @@ export async function pushToUsers(userIds: string[], event: string, message: obj
     if (unique.length === 0) return;
 
     // 批量读在线节点：一次 multi 拿全部，避免 N 个用户 N 次独立 RTT。
-    // redisClient 由 createClient() 创建（返回 RedisClient），转成 RedisClientType 以满足类型。
-    const client = redisClient as unknown as RedisClientType;
-    const multi = client.multi();
+    // redisClient 已是 RedisClientType（见 dbRedis.ts），直接调用 multi。
+    const multi = redisClient.multi();
     for (const userId of unique) {
         multi.get(`user:online:${userId}`);
     }
+    // node-redis 的 multi.exec() 返回 ReplyUnion[]（含 map/set 等），这里只发 GET，实际是 string|null。
+    // 类型系统判定 ReplyUnion 与 string|null 不重叠，须先经 unknown 中转才能收窄。
     const results = (await multi.exec()) as unknown as (string | null)[];
 
     // 按目标节点分组：同一节点只发一条 IPC，但携带该节点上【全部】在线用户——

@@ -301,23 +301,31 @@ const onMongoConnected = async (): Promise<void> => {
         }
 
         // 3) 回填消息会话序号计数器：每个 (sender,receiver,noviCode) 取各会话最大 seq。
-        //    find 出有 seq 的消息 → 按会话归并取 max → bulkWrite upsert 到 msgSeqCounter。
-        //    幂等：每次启动重算各会话真实 max，收敛到正确水位。
-        const msgDocs = await FriendMessage.collection
-            .find({ seq: { $type: 'number' } }, { projection: { sender: 1, receiver: 1, noviCode: 1, seq: 1 } })
+        //    $group 在 Mongo 侧聚合取各会话 max，只把「每会话一条」的摘要拉回 Node，
+        //    避免全量 toArray 把整个消息集塞进 Node 内存（随消息量线性增长）。
+        //    幂等：每次启动重算各会话真实 max，$set 固定值，重复跑收敛到同一水位。
+        type SeqGroup = { _id: { sender: string; receiver: string; noviCode: string }; seq: number };
+        // $group 在 Mongo 侧取各会话 max，只把「每会话一条」摘要拉回 Node（避免全量进内存）。
+        const groups = await FriendMessage.collection
+            .aggregate<SeqGroup>([
+                { $match: { seq: { $type: 'number' } } },
+                {
+                    $group: {
+                        _id: {
+                            sender: { $toString: '$sender' },
+                            receiver: { $toString: '$receiver' },
+                            noviCode: { $toString: '$noviCode' }
+                        },
+                        seq: { $max: '$seq' }
+                    }
+                }
+            ])
             .toArray();
-        if (msgDocs.length > 0) {
-            const byConv = new Map<string, { sender: string; receiver: string; noviCode: string; seq: number }>();
-            for (const m of msgDocs) {
-                const key = `${m.sender}\u0000${m.receiver}\u0000${m.noviCode}`;
-                const cur = byConv.get(key);
-                if (!cur) byConv.set(key, { sender: m.sender.toString(), receiver: m.receiver.toString(), noviCode: m.noviCode, seq: m.seq });
-                else if (m.seq > cur.seq) cur.seq = m.seq;
-            }
-            const ops = Array.from(byConv.values()).map((c) => ({
+        if (groups.length > 0) {
+            const ops = groups.map((g) => ({
                 updateOne: {
-                    filter: { sender: c.sender, receiver: c.receiver, noviCode: c.noviCode },
-                    update: { $set: { sender: c.sender, receiver: c.receiver, noviCode: c.noviCode, seq: c.seq } },
+                    filter: { sender: g._id.sender, receiver: g._id.receiver, noviCode: g._id.noviCode },
+                    update: { $set: { sender: g._id.sender, receiver: g._id.receiver, noviCode: g._id.noviCode, seq: g.seq } },
                     upsert: true,
                 },
             }));

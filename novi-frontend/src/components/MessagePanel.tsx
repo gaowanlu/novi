@@ -47,6 +47,9 @@ import {
 import { isReady, DEFAULT_NOVI_CODE, resolveCurrentNovicode } from "@/crypto/friendKeys";
 
 const PAGE_SIZE = 30;
+// 后端 markreaded / crypto/ack 对 messageIds 设 .max(200)，超限返回 400。
+// 前端提交前按此上限切片分批，避免大 backlog（多会话×每窗口30条）整批被拒导致 ack/已读静默丢失。
+const BATCH_SIZE = 200;
 
 // 头像底色：品牌绿；在白底面板上更亮、在绿色头部/深色上更深，保证两种场景下都可辨识
 const AVATAR_BG_CLASS = "bg-[oklch(0.8_0.17_158)] dark:bg-[oklch(0.62_0.14_160)]";
@@ -121,6 +124,30 @@ export default function MessagePanel({
     const messagesRef = useRef<DisplayMessage[]>([]);
     useEffect(() => { messagesRef.current = messages; }, [messages]);
 
+    // 按 ≤BATCH_SIZE 分批提交批量接口（markreaded / crypto/ack）：
+    // 后端对 messageIds 有 .max(200) 上限，超限返回 400 会静默丢失整批 ack/已读。
+    // 切片并发提交，任一批失败仅影响该批（console.error），不阻塞其它批。
+    const submitInBatches = useCallback(
+        async (url: string, ids: string[]) => {
+            const result: string[] = [];
+            const chunks: string[][] = [];
+            for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+                chunks.push(ids.slice(i, i + BATCH_SIZE));
+            }
+            await Promise.all(chunks.map(async (chunk) => {
+                const res = await apiFetch(url, {
+                    method: "PUT",
+                    body: JSON.stringify({ messageIds: chunk })
+                });
+                const data = await parseJson(res);
+                if (!res.ok) throw new Error(errorText(res, data));
+                result.push(...chunk);
+            }));
+            return result;
+        },
+        []
+    );
+
     // crypto/ack 提交（1秒去抖批量）
     const flushAck = useCallback(async () => {
         if (ackTimer.current) window.clearTimeout(ackTimer.current);
@@ -129,19 +156,14 @@ export default function MessagePanel({
             pendingAck.current = [];
             if (ids.length === 0) return;
             try {
-                const res = await apiFetch(APIMacro.PUTMESSAGE_CRYPTO_ACK, {
-                    method: "PUT",
-                    body: JSON.stringify({ messageIds: ids })
-                });
-                const data = await parseJson(res);
-                if (!res.ok) throw new Error(errorText(res, data));
+                const ok = await submitInBatches(APIMacro.PUTMESSAGE_CRYPTO_ACK, ids);
                 setMessages(prev => prev.map(m =>
-                    ids.includes(m._id) ? { ...m, cryptoAckAt: m.cryptoAckAt ?? new Date().toISOString() } : m));
+                    ok.includes(m._id) ? { ...m, cryptoAckAt: m.cryptoAckAt ?? new Date().toISOString() } : m));
             } catch (err: unknown) {
                 console.error("crypto ack failed:", err);
             }
         }, 1000);
-    }, []);
+    }, [submitInBatches]);
     flushAckRef.current = flushAck;
 
     // 校验 + 展示「一条」消息，expectedPreHash 由调用方显式传入（链头 / 运行中的上一条 currHash）：
@@ -333,19 +355,14 @@ export default function MessagePanel({
             pendingMarkRead.current = [];
             if (ids.length === 0) return;
             try {
-                const res = await apiFetch(APIMacro.PUTMESSAGE_MARKREADED, {
-                    method: "PUT",
-                    body: JSON.stringify({ messageIds: ids })
-                });
-                const data = await parseJson(res);
-                if (!res.ok) throw new Error(errorText(res, data));
+                const ok = await submitInBatches(APIMacro.PUTMESSAGE_MARKREADED, ids);
                 setMessages(prev => prev.map(m =>
-                    ids.includes(m._id) ? { ...m, readAt: m.readAt ?? new Date().toISOString() } : m));
+                    ok.includes(m._id) ? { ...m, readAt: m.readAt ?? new Date().toISOString() } : m));
             } catch (err: unknown) {
                 console.error("markreaded failed:", err);
             }
         }, 1000);
-    }, []);
+    }, [submitInBatches]);
 
     const markRead = useCallback((ids: string[]) => {
         pendingMarkRead.current.push(...ids);
