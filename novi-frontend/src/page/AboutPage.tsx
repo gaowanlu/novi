@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import SiteFooter from '@/components/SiteFooter';
 
 const PRINCIPLES = [
     {
@@ -43,8 +44,8 @@ export default function AboutPage() {
                 </div>
             </header>
 
-            <main className="flex-1 px-6 py-12">
-                <div className="mx-auto flex w-full max-w-4xl flex-col gap-10">
+            <main className="flex flex-1 flex-col px-6 py-12">
+                <div className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-10">
                     {/* Hero */}
                     <section className="flex flex-col gap-4">
                         <Badge variant="secondary" className="w-fit gap-1.5 rounded-full px-3 py-1 text-xs">
@@ -85,8 +86,8 @@ export default function AboutPage() {
                     <Separator />
 
                     {/* 联系 + CTA */}
-                    <section className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
-                        <div className="flex flex-col gap-1">
+                    <section className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+                        <div className="hidden flex-col gap-1 md:flex">
                             <p className="text-xs text-muted-foreground">有问题？联系我们</p>
                             <a
                                 href="mailto:heizuboriyo@gmail.com"
@@ -96,7 +97,7 @@ export default function AboutPage() {
                                 heizuboriyo@gmail.com
                             </a>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-wrap items-center justify-center gap-3 md:justify-end">
                             <Button asChild variant="ghost">
                                 <Link to="/functional">了解功能</Link>
                             </Button>
@@ -110,6 +111,8 @@ export default function AboutPage() {
                     </section>
                 </div>
             </main>
+
+            <SiteFooter />
         </div>
     );
 }

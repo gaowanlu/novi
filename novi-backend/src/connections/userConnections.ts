@@ -16,7 +16,7 @@ interface NoviSocket extends Socket {
 // 负责 WebSocket 连接的认证、管理和事件处理
 class UserConnections {
     socketIOServer: Server | null = null;
-    userId2Socket = new Map<string, NoviSocket>();
+    userId2Sockets = new Map<string, Set<NoviSocket>>();
 
     /**
      * 初始化 Socket.IO 服务器
@@ -90,15 +90,18 @@ class UserConnections {
         });
 
         // 定时打印在线用户（保持原行为）
-        setInterval(() => {
+        const interval = setInterval(() => {
             const allOnlineUserId: string[] = [];
-            this.userId2Socket.forEach((v: NoviSocket, k: string) => {
-                allOnlineUserId.push(k);
+            this.userId2Sockets.forEach((sockets, userId) => {
+                allOnlineUserId.push(userId);
             });
             logger.error(
                 `所有在线用户=> 数量 ${allOnlineUserId.length} 用户ID ${allOnlineUserId.join(",")}`
             );
         }, 5000);
+        // 不阻止进程退出：shutdown 时由 gracefulShutdown 关闭 HTTP server，
+        // socket.io server 关闭后该 interval 自然失效，但显式 unref 更安全
+        interval.unref();
     }
 
     private async onConnect(socket: NoviSocket): Promise<void> {
@@ -109,7 +112,13 @@ class UserConnections {
                 await redisClient.SET(`user:online:${socket.noviUser._id}`, `${process.env.NOVI_NODE}`, {
                     EX: 60 * 5,
                 });
-                this.userId2Socket.set(socket.noviUser._id, socket);
+                // 支持多设备/多标签页：同一用户可持有多个 socket
+                let sockets = this.userId2Sockets.get(socket.noviUser._id);
+                if (!sockets) {
+                    sockets = new Set();
+                    this.userId2Sockets.set(socket.noviUser._id, sockets);
+                }
+                sockets.add(socket);
             } catch (err: unknown) {
                 const e = err instanceof Error ? err : new Error(String(err));
                 logger.error(`新用户连接 ${e.message}`);
@@ -129,14 +138,25 @@ class UserConnections {
             return;
         }
 
-        this.userId2Socket.delete(noviUserId);
+        // 从 Set 中移除该 socket；若用户已无活跃连接则清除整条记录并下线
+        const sockets = this.userId2Sockets.get(noviUserId);
+        if (sockets) {
+            sockets.delete(socket);
+            if (sockets.size === 0) {
+                this.userId2Sockets.delete(noviUserId);
+            }
+        }
 
-        try {
-            await redisClient.DEL(`user:online:${noviUserId}`);
-            logger.error(`删除用户在线状态 user:online:${noviUserId} 成功`);
-        } catch (err: unknown) {
-            const e = err instanceof Error ? err : new Error(String(err));
-            logger.error(`用户断开 ${e.message}`);
+        // 只有当该用户在本节点已无任何 socket 时才清除 Redis 在线状态，
+        // 避免多设备场景下断开一个设备导致其它设备被误判离线
+        if (!this.userId2Sockets.has(noviUserId)) {
+            try {
+                await redisClient.DEL(`user:online:${noviUserId}`);
+                logger.error(`删除用户在线状态 user:online:${noviUserId} 成功`);
+            } catch (err: unknown) {
+                const e = err instanceof Error ? err : new Error(String(err));
+                logger.error(`用户断开 ${e.message}`);
+            }
         }
     }
 
@@ -176,15 +196,18 @@ class UserConnections {
         }
     }
 
+    // 向该用户在本节点的所有 socket fan-out（多设备/多标签页都能收到）
     public eventMessageForClientByUserId(userId: string, eventName: string, msg: object | string) {
-        const clientSocket = this.userId2Socket.get(userId);
-        if (!clientSocket) {
+        const sockets = this.userId2Sockets.get(userId);
+        if (!sockets || sockets.size === 0) {
             logger.error(
                 `eventMessageForClientByUserId failed userId ${userId} eventName ${eventName} msg ${msg}`
             );
             return;
         }
-        clientSocket.emit(eventName, msg);
+        for (const s of sockets) {
+            s.emit(eventName, msg);
+        }
     }
 }
 

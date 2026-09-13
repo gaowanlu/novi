@@ -39,7 +39,9 @@ const postFriendMessagHandler: RequestHandler = async (req: IRequest, res: Respo
     }
 
     try {
-        // 检查二人是否为好友关系
+        // 检查二人是否为好友关系，且 novicode 必须是「当前」代次
+        // 按 createdAt 降序取最新的 accepted 记录（删除后重新添加会产生新代次），
+        // 防止旧代次 novicode 写入消息（违反代次隔离不变量）
         const friendRequest = await FriendRequest.findOne({
             $or: [
                 { requester: myUserId, receiver: receiver },
@@ -48,9 +50,13 @@ const postFriendMessagHandler: RequestHandler = async (req: IRequest, res: Respo
             status: {
                 $in: ['accepted']
             }
-        });
+        }).sort({ createdAt: -1 });
         if (!friendRequest) {
             res.status(400).json({ message: '不能向非好友用户发送消息' });
+            return
+        }
+        if (friendRequest.novicode !== noviCode) {
+            res.status(400).json({ message: '消息代次与当前好友关系不匹配，请刷新后重试' });
             return
         }
 

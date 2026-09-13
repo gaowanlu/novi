@@ -304,12 +304,14 @@ export default function NewFriendPage() {
                                     />
                                 </div>
                             </div>
-                            <Button type="submit" className="w-fit" disabled={searching}>
-                                {searching
-                                    ? <Loader2 data-icon="inline-start" className="animate-spin" />
-                                    : <Search data-icon="inline-start" />}
-                                {searching ? '搜索中…' : '搜索'}
-                            </Button>
+                            <div className="flex justify-end">
+                                <Button type="submit" disabled={searching}>
+                                    {searching
+                                        ? <Loader2 data-icon="inline-start" className="animate-spin" />
+                                        : <Search data-icon="inline-start" />}
+                                    {searching ? '搜索中…' : '搜索'}
+                                </Button>
+                            </div>
                         </form>
 
                         <Separator />

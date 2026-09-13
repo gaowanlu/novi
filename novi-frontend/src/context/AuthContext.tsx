@@ -5,7 +5,7 @@ import {
     useState,
     type ReactNode,
 } from 'react';
-import { apiFetch } from '@/api/request';
+import { apiFetch, resetSessionExpired } from '@/api/request';
 import { APIMacro } from '@/api/APIMacro';
 
 // 会话中保存的用户信息（登录接口返回）
@@ -52,6 +52,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setTokenVerified(true);
         localStorage.setItem('jwtToken', newToken);
         localStorage.setItem('userInfo', JSON.stringify(userInfo));
+        resetSessionExpired();
     };
 
     const logout = () => {
@@ -79,7 +80,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         localStorage.setItem('userInfo', JSON.stringify(newUserInfo));
     };
 
-    // 刷新页面后用本地 token 向服务端验证一次：失效则自动回到登录页
+    // 刷新页面后用本地 token 向服务端验证一次：失效则 apiFetch 内部统一处理跳转
     useEffect(() => {
         if (!token || tokenVerified) return;
         let cancelled = false;
@@ -90,9 +91,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 if (cancelled) return;
                 if (res.ok) {
                     setTokenVerified(true);
-                } else {
+                } else if (res.status === 401) {
                     clearSession();
-                    window.location.href = '/signin';
                 }
             } catch {
                 // 网络错误不登出，等待下次心跳/请求重试
@@ -110,7 +110,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 const res = await apiFetch(APIMacro.HEARTBEAT, { method: 'GET' });
                 if (res.status === 401) {
                     clearSession();
-                    window.location.href = '/signin';
                 }
             } catch {
                 // 网络抖动忽略，下次心跳再试

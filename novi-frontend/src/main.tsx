@@ -6,14 +6,17 @@ import App from './page/App.tsx'
 import { AuthProvider } from './context/AuthContext';
 import { VaultProvider } from './context/VaultContext';
 import { Toaster } from "@/components/ui/sonner"
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <AuthProvider>
         <VaultProvider>
-          <Toaster position='top-center' />
-          <App />
+          <ErrorBoundary>
+            <Toaster position='top-center' />
+            <App />
+          </ErrorBoundary>
         </VaultProvider>
       </AuthProvider>
     </BrowserRouter>

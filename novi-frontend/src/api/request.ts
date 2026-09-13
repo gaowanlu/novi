@@ -1,4 +1,24 @@
 // src/api/request.ts
+
+// 单一 401 处理：清除本地会话并跳转登录页。
+// 用模块级 flag 防止同一导航周期内被多次触发（apiFetch + 调用方可能都检查 401）。
+let hasHandled401 = false;
+
+export function handleSessionExpired(): void {
+    if (hasHandled401) return;
+    hasHandled401 = true;
+    localStorage.removeItem('jwtToken');
+    localStorage.removeItem('userInfo');
+    // 延迟重置 flag，让当前调用栈完成后再允许下一次
+    setTimeout(() => { hasHandled401 = false; }, 0);
+    window.location.href = '/signin';
+}
+
+// 登录成功时调用，重置 401 处理状态
+export function resetSessionExpired(): void {
+    hasHandled401 = false;
+}
+
 export const apiFetch = async (url: string, options: RequestInit = {}) => {
     const token = localStorage.getItem('jwtToken');
 
@@ -10,12 +30,9 @@ export const apiFetch = async (url: string, options: RequestInit = {}) => {
 
     const res = await fetch(url, { ...options, headers });
 
-    // 如果 token 过期自动退出
+    // 如果 token 过期自动退出（单一权威，调用方无需再重复处理 401）
     if (res.status === 401) {
-        localStorage.removeItem('jwtToken');
-        localStorage.removeItem('userInfo');
-        window.location.href = '/signin';
-        // throw new Error('登录已过期');
+        handleSessionExpired();
     }
 
     return res;
