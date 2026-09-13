@@ -1,5 +1,6 @@
 .agents/
 .claude/
+.opencode/
 skills-lock.json
 
 # 本地演示 mock 服务的依赖
