@@ -35,16 +35,17 @@ From the repository root:
 docker compose -f novi-backend/environment/docker-compose.yml up -d
 ```
 
-This brings up MongoDB, PostgreSQL, Redis, Kafka (controller + broker), and RabbitMQ, all bound to `127.0.0.1` with the same credentials as `novi-backend/.env.example`.
+This brings up MongoDB, PostgreSQL, Redis, Kafka (controller + broker), and RabbitMQ, all bound to `127.0.0.1` with local dev credentials (see the `.env` you create in the next step).
 
 ### 2. Configure the backend
 
 ```bash
 cd novi-backend
-cp .env.example .env
+# Create a local .env (gitignored) — there is no committed .env.example:
+printf 'NOVI_JWT_SECRET=<pick-a-strong-secret>\nMONGO_URI=mongodb://root:password@127.0.0.1:27017/novi\nPG_USER=admin\nPG_PASSWORD=password\nPG_HOST=127.0.0.1\nPG_PORT=5432\nPG_DATABASE=novi\nREDIS_HOST=127.0.0.1\nREDIS_PASSWORD=password\nKAFKA_BROKERS=127.0.0.1:29092\nRABBITMQ_URI=amqp://admin:password@127.0.0.1:5672\n' > .env
 ```
 
-Key variables (see `.env.example` for the full list): `NOVI_NODE`, `NOVI_HOST`, `NOVI_PORT` (default `3000`), `NOVI_JWT_SECRET`, `MONGO_URI`, `PG_*`, `REDIS_*`, `KAFKA_BROKERS`, `RABBITMQ_URI`, and `EXPRESS_STATIC_PATH` (serve the built frontend in SPA mode when set).
+Key variables (there is no committed `.env.example` — create `.env` yourself, as above): `NOVI_NODE`, `NOVI_HOST`, `NOVI_PORT` (default `3000`), `NOVI_JWT_SECRET` (required — the process fails to boot without it), `MONGO_URI`, `PG_*`, `REDIS_*`, `KAFKA_BROKERS`, `RABBITMQ_URI`, and `EXPRESS_STATIC_PATH` (serve the built frontend in SPA mode when set).
 
 ### 3. Run the backend
 
